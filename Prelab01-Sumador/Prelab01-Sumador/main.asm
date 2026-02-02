@@ -3,8 +3,9 @@
 *
 * Creado: 01/02/2026 - 12:00
 * Autor : Abner Quiej
-* Descripcion: Es el primer prelab del curso, en este se tiene que tener dos botones uno para decremento y otro para incremento, estos accionaran unas
-salidas (leds) que encenderan y/o apagaran en numeros binarios, son dos fases o dos numeros de 4 bits; estos despues se sumaran y se interpretaran
+* Descripcion: Es el primer prelab del curso, en este se tiene que tener dos botones uno para decremento
+ y otro para incremento, estos accionaran unas salidas (leds) que encenderan y/o apagaran en numeros binarios,
+ xson dos fases o dos numeros de 4 bits; estos despues se sumaran y se interpretaran
 en otras 4 salidas de led.
 
 */
@@ -30,10 +31,14 @@ SETUP:
 CBI DDRB, DDB4 // Poniendo en 0, el bit 4 de DDRB -> Input
 CBI DDRB, DDB5 // Poniendo en 0, el bit 5 de DDRB -> Input
 CBI DDRC, DDC5 // Poniendo en 0, el bit 5 de DDRC -> Input
+CBI DDRD, DDD2 // Poniendo en 0, el bit 2 de DDRC -> Input
+CBI DDRD, DDD3 // Poniendo en 0, el bit 3 de DDRC -> Input
 
 SBI PORTB, PORTB4 // Habilitando pull-up para PB4
 SBI PORTB, PORTB5 // Habilitando pull-up para PB5
 SBI PORTC, PORTC5 // Habilitando pull-up para PC5
+SBI PORTD, PORTD2 // Habilitando pull-up para PD2
+SBI PORTD, PORTD3 // Habilitando pull-up para PD3
 
 
 // Output -> PD7, PD6, PD5, PD4; PB0, PB1, PB2, PB3; PC0, PC1, PC2, PC3, PC4
@@ -121,6 +126,8 @@ CHECK_PB5:
     // PB5 (NC) ? restar 1 a R16
     SBIS PINB, PINB5	//Skip si es 1, leer la siguiente si es 0
     RJMP CHECK_PD2		//chequear el siguiente boton
+	CPI R16, 0x00		//Comparar con 0
+	BREQ CHECK_PD2		//Si ya es 0, omitir decremento
     DEC R16				//restar 1 a r16
 	CALL DISPLAY
 	RJMP UPDATE_STATE
@@ -129,6 +136,8 @@ CHECK_PD2:
     // PD2 ? restar 1 a R17
     SBIS PIND, PIND2	//Skip si es 1, leer la siguiente si es 0
     RJMP CHECK_PD3		//chequear siguiente boton
+	CPI R17, 0x00		//Comparar con 0
+	BREQ CHECK_PD2		//Si ya es 0, omitir decremento
     DEC R17				//restar 1 a r17
 	CALL DISPLAY
 	RJMP UPDATE_STATE
@@ -143,11 +152,18 @@ CHECK_PD3:
 
 
 DELAY:
-LDI R24, 255
-LOOP_DELAY:
-DEC R24
-BRNE LOOP_DELAY
-RET
+    LDI  R24, 200       // 1 ciclo
+LOOP1:
+    LDI  R25, 133       // 1 ciclo (se ejecuta 200 veces)
+LOOP2:
+    DEC  R25            // 1 ciclo (se ejecuta 200×133 veces)
+    NOP                 // 1 ciclo (compensación)
+    BRNE LOOP2          // 2 ciclos si salta, 1 si no
+    
+    DEC  R24            // 1 ciclo (se ejecuta 200 veces)
+    BRNE LOOP1          // 2 ciclos si salta, 1 si no
+    
+    RET                 // 4 ciclos
 
 UPDATE_STATE:
     MOV R18, R20        // Nuevo estado base PORTB
