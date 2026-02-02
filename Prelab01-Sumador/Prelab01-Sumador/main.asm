@@ -114,33 +114,70 @@ ANTIREBOTE:
     SBIS PINB, PINB4	//skip si es 1, leer la siguiente si es 0
     RJMP CHECK_PB5		//chequear PINB5
     INC R16				//incrementar 1 a R16
+	CALL DISPLAY
+	RJMP UPDATE_STATE
 
 CHECK_PB5:
     // PB5 (NC) ? restar 1 a R16
     SBIS PINB, PINB5	//Skip si es 1, leer la siguiente si es 0
     RJMP CHECK_PD2		//chequear el siguiente boton
     DEC R16				//restar 1 a r16
+	CALL DISPLAY
+	RJMP UPDATE_STATE
 
 CHECK_PD2:
     // PD2 ? restar 1 a R17
     SBIS PIND, PIND2	//Skip si es 1, leer la siguiente si es 0
     RJMP CHECK_PD3		//chequear siguiente boton
     DEC R17				//restar 1 a r17
+	CALL DISPLAY
+	RJMP UPDATE_STATE
 
 CHECK_PD3:
     // PD3 ? sumar 1 a R17
     SBIS PIND, PIND3	// skip si es1, leer la siguiente si es 0
     RJMP UPDATE_STATE	// actualizar estado
     INC R17				// Sumar 1 al r17
+	CALL DISPLAY
+	RJMP UPDATE_STATE
 
 
 DELAY:
-LDI R19, 255
+LDI R24, 255
 LOOP_DELAY:
-DEC R19
+DEC R24
 BRNE LOOP_DELAY
 RET
 
+UPDATE_STATE:
+    MOV R18, R20        // Nuevo estado base PORTB
+    MOV R19, R21        // Nuevo estado base PORTD
+    RJMP MAIN_LOOP
+
+DISPLAY:
+    // Actualizar el primer numero binario
+    MOV  R22, R16		//guardamos el r16 en r22
+    ANDI R22, 0x0F		//Aislamos solo las entradas PB0 - PB3
+
+    IN   R23, PORTB		//Guardamos la configuracion actual del PROTB
+    ANDI R23, 0xF0		//Aislamos los pullups
+    OR   R22, R23		//combinamos ambas configuraciones
+    OUT  PORTB, R22		//Actualizamos las salidas del PORTB con la combinacion de ambas configuraiones
+
+    // Actualizar el segundo numero binario
+    MOV  R22, R17		//Guardamos el r17 en r22 
+    ANDI R22, 0x0F		//Aislamos solo los primeros bit de entrada
+    LSL  R22			//Corrimiento de 1 bit
+    LSL  R22			//Corrimiento de 1 bit	
+    LSL  R22			//Corrimiento de 1 bit
+    LSL  R22			//Corrimiento de 1 bit
+
+    IN   R23, PORTD		//leer PORTD Actual
+    ANDI R23, 0x0F		//Aislar primeros 4 BITS
+    OR   R22, R23		//Combinar R22 y R23
+    OUT  PORTD, R22		//Actualizar PORTD
+
+    RET
 
 /****************************************/
 // Interrupt routines
