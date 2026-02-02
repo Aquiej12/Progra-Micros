@@ -26,42 +26,122 @@ OUT SPH, R16
 // Configuracion MCU
 SETUP:
 // Configurar entradas y salidas
-// Input -> PD5
+// Input -> PB4, PB5, PC5
 CBI DDRB, DDB4 // Poniendo en 0, el bit 4 de DDRB -> Input
 CBI DDRB, DDB5 // Poniendo en 0, el bit 5 de DDRB -> Input
+CBI DDRC, DDC5 // Poniendo en 0, el bit 5 de DDRC -> Input
 
-CBI PORTD, PORTD5 // Deshabilitando pull-up para PD5
-// Output -> PB0
+SBI PORTB, PORTB4 // Habilitando pull-up para PB4
+SBI PORTB, PORTB5 // Habilitando pull-up para PB5
+SBI PORTC, PORTC5 // Habilitando pull-up para PC5
+
+
+// Output -> PD7, PD6, PD5, PD4; PB0, PB1, PB2, PB3; PC0, PC1, PC2, PC3, PC4
+SBI DDRD, DDD4 // Poniendo en 1, el bit 4 de DDRD -> Output
+SBI DDRD, DDD5 // Poniendo en 1, el bit 5 de DDRD -> Output
+SBI DDRD, DDD6 // Poniendo en 1, el bit 6 de DDRD -> Output
+SBI DDRD, DDD7 // Poniendo en 1, el bit 7 de DDRD -> Output
+
 SBI DDRB, DDB0 // Poniendo en 1, el bit 0 de DDRB -> Output
-CBI PORTB, PORTB0 // Initialmente apagado el PB0
+SBI DDRB, DDB1 // Poniendo en 1, el bit 1 de DDRB -> Output
+SBI DDRB, DDB2 // Poniendo en 1, el bit 2 de DDRB -> Output
+SBI DDRB, DDB3 // Poniendo en 1, el bit 3 de DDRB -> Output
+
+SBI DDRC, DDC0 // Poniendo en 1, el bit 0 de DDRC -> Output
+SBI DDRC, DDC1 // Poniendo en 1, el bit 1 de DDRC -> Output
+SBI DDRC, DDC2 // Poniendo en 1, el bit 2 de DDRC -> Output
+SBI DDRC, DDC3 // Poniendo en 1, el bit 3 de DDRC -> Output
+SBI DDRC, DDC4 // Poniendo en 1, el bit 4 de DDRC -> Output
+
+// Puerto D -> PD4, PD5, PD6, PD7
+CBI PORTD, PORTD4   // Inicialmente apagado el PD4
+CBI PORTD, PORTD5   // Inicialmente apagado el PD5
+CBI PORTD, PORTD6   // Inicialmente apagado el PD6
+CBI PORTD, PORTD7   // Inicialmente apagado el PD7
+
+// Puerto B -> PB0, PB1, PB2, PB3
+CBI PORTB, PORTB0   // Inicialmente apagado el PB0
+CBI PORTB, PORTB1   // Inicialmente apagado el PB1
+CBI PORTB, PORTB2   // Inicialmente apagado el PB2
+CBI PORTB, PORTB3   // Inicialmente apagado el PB3
+
+// Puerto C -> PC0, PC1, PC2, PC3, PC4
+CBI PORTC, PORTC0   // Inicialmente apagado el PC0
+CBI PORTC, PORTC1   // Inicialmente apagado el PC1
+CBI PORTC, PORTC2   // Inicialmente apagado el PC2
+CBI PORTC, PORTC3   // Inicialmente apagado el PC3
+CBI PORTC, PORTC4   // Inicialmente apagado el PC4 (CARRY-BORROW)
+
 CLR R16
 CLR R17
 CLR R18
 CLR R19
-IN R16, PIND
+IN R18, PINB    ; Guardar estado inicial de PORTB
+IN R19, PIND    ; Guardar estado inicial de PORTD
+
 /****************************************/
 // Loop Infinito
 MAIN_LOOP:
-IN R17, PIND // Leer PIND R17 = 0b11111111
-CP R17, R16
-BREQ MAIN_LOOP
-CALL DELAY
-IN R18, PIND
-CP R18, R17
-BRNE MAIN_LOOP
-MOV R16, R17
-ANDI R17, 0b00100000
-BRNE MAIN_LOOP
-SBI PINB, PINB0 // Toggle
-RJMP MAIN_LOOP
+    // Primera lectura
+    IN R20, PINB    ; Leer PORTB actual
+    IN R21, PIND    ; Leer PORTD actual
+
+    // Comparar con estado base
+    CP R20, R18
+    BRNE ANTIREBOTE
+    CP R21, R19
+    BRNE ANTIREBOTE
+
+    RJMP MAIN_LOOP  // Sin cambios ? volver al loop
 /****************************************/
 // NON-Interrupt subroutines
+
+ANTIREBOTE:
+    CALL DELAY
+
+    ; Segunda lectura
+    IN R20, PINB
+    IN R21, PIND
+
+    ; ¿El cambio se mantuvo?
+    CP R20, R18
+    BREQ MAIN_LOOP
+    CP R21, R19
+    BREQ MAIN_LOOP
+	
+	//Si hubo cambio, ver cual fue:
+    // PB4 (NC) ? sumar 1 a R16
+    SBIS PINB, PINB4	//skip si es 1, leer la siguiente si es 0
+    RJMP CHECK_PB5		//chequear PINB5
+    INC R16				//incrementar 1 a R16
+
+CHECK_PB5:
+    // PB5 (NC) ? restar 1 a R16
+    SBIS PINB, PINB5	//Skip si es 1, leer la siguiente si es 0
+    RJMP CHECK_PD2		//chequear el siguiente boton
+    DEC R16				//restar 1 a r16
+
+CHECK_PD2:
+    // PD2 ? restar 1 a R17
+    SBIS PIND, PIND2	//Skip si es 1, leer la siguiente si es 0
+    RJMP CHECK_PD3		//chequear siguiente boton
+    DEC R17				//restar 1 a r17
+
+CHECK_PD3:
+    // PD3 ? sumar 1 a R17
+    SBIS PIND, PIND3	// skip si es1, leer la siguiente si es 0
+    RJMP UPDATE_STATE	// actualizar estado
+    INC R17				// Sumar 1 al r17
+
+
 DELAY:
 LDI R19, 255
 LOOP_DELAY:
 DEC R19
 BRNE LOOP_DELAY
 RET
+
+
 /****************************************/
 // Interrupt routines
 /****************************************/
