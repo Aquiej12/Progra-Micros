@@ -18,15 +18,6 @@ en otras 4 salidas de led.
 .cseg
 .org 0x0000
 /****************************************/
-// Prescaler de CPU a /16
-// 16 MHz / 16 = 1 MHz
-
-LDI R16, (1<<CLKPCE)
-STS CLKPR, R16
-
-LDI R16, (1<<CLKPS2)    ; divisor /16
-STS CLKPR, R16
-
 // Configuracion de la pila
 LDI R16, LOW(RAMEND)
 OUT SPL, R16
@@ -39,13 +30,13 @@ SETUP:
 // Input -> PB4, PB5, PC5
 
 CBI DDRB, DDB4 // Poniendo en 0, el bit 4 de DDRB -> Input
-CBI DDRC, DDC4 // Poniendo en 0, el bit 4 de DDRC -> Input
+CBI DDRB, DDB5 // Poniendo en 0, el bit 5 de DDRB -> Input
 CBI DDRC, DDC5 // Poniendo en 0, el bit 5 de DDRC -> Input
 CBI DDRD, DDD7 // Poniendo en 0, el bit 2 de DDRC -> Input
 CBI DDRD, DDD6 // Poniendo en 0, el bit 3 de DDRC -> Input
 
 SBI PORTB, PORTB4 // Habilitando pull-up para PB4
-SBI PORTC, PORTC4 // Habilitando pull-up para PC4
+SBI PORTB, PORTB5 // Habilitando pull-up para PB5
 SBI PORTC, PORTC5 // Habilitando pull-up para PC5
 SBI PORTD, PORTD7 // Habilitando pull-up para PD6
 SBI PORTD, PORTD6 // Habilitando pull-up para PD7
@@ -61,13 +52,12 @@ SBI DDRB, DDB0 // Poniendo en 1, el bit 0 de DDRB -> Output
 SBI DDRB, DDB1 // Poniendo en 1, el bit 1 de DDRB -> Output
 SBI DDRB, DDB2 // Poniendo en 1, el bit 2 de DDRB -> Output
 SBI DDRB, DDB3 // Poniendo en 1, el bit 3 de DDRB -> Output
-SBI DDRB, DDB5
 
 SBI DDRC, DDC0 // Poniendo en 1, el bit 0 de DDRC -> Output
 SBI DDRC, DDC1 // Poniendo en 1, el bit 1 de DDRC -> Output
 SBI DDRC, DDC2 // Poniendo en 1, el bit 2 de DDRC -> Output
 SBI DDRC, DDC3 // Poniendo en 1, el bit 3 de DDRC -> Output
-
+SBI DDRC, DDC4 // Poniendo en 1, el bit 4 de DDRC -> Output
 
 // Puerto D -> PD5, PD4, PD3, PD2
 CBI PORTD, PORTD5   // Inicialmente apagado el PD4
@@ -80,169 +70,151 @@ CBI PORTB, PORTB0   // Inicialmente apagado el PB0
 CBI PORTB, PORTB1   // Inicialmente apagado el PB1
 CBI PORTB, PORTB2   // Inicialmente apagado el PB2
 CBI PORTB, PORTB3   // Inicialmente apagado el PB3
-CBI PORTB, PORTB5   // Inicialmente apagado el PB3
-
 
 // Puerto C -> PC0, PC1, PC2, PC3, PC4
 CBI PORTC, PORTC0   // Inicialmente apagado el PC0
 CBI PORTC, PORTC1   // Inicialmente apagado el PC1
 CBI PORTC, PORTC2   // Inicialmente apagado el PC2
 CBI PORTC, PORTC3   // Inicialmente apagado el PC3
+CBI PORTC, PORTC4   // Inicialmente apagado el PC4 (CARRY-BORROW)
 
 
-CLR R17
-CLR R16
-CLR R20
-CLR R21
+IN R16, PIND
+IN R17, PORTD
+ANDI R17, 0b11000011
+IN R18, PINB
+IN R19, PORTB
+ANDI R19, 0b11110000
+IN R20, PINC
+IN R21, PORTC
+ANDI R21, 0b11100000
+CLR R23
+CLR R25
+CLR R27
 
 /****************************************/
 // Loop Infinito
 MAIN_LOOP:
-// ---- PB4 (NO) ----
-	IN   R16, PINB
-	ANDI R16, 0b00010000
-	BRNE VPB5
+	IN R22, PIND
+	CP R22, R16
+	BRNE btB
 	CALL DELAY
-	IN   R16, PINB
-	ANDI R16, 0b00010000
-	BRNE VPB5
-	CALL CONTAR1up
+	IN R22, PIND
+	CP R22, R16
+	BRNE btB
+	CALL CONTADOR1
 
-	VPB5:
-	; ---- PC4 (NO) ----
-	IN   R16, PINC
-	ANDI R16, 0b00010000
-	BRNE VPC5
+	btB:
+	IN R24, PINB
+	CP R24, R18
+	BRNE btC
 	CALL DELAY
-	IN   R16, PINC
-	ANDI R16, 0b00010000
-	BRNE VPC5
-	CALL CONTAR1dn
+	IN R24, PINB
+	CP R24, R18
+	BRNE btC
+	CALL CONTADOR2
 
-	VPC5:
-	; ---- PC5 (NO) ----
-	IN   R16, PINC
-	ANDI R16, 0b00100000
-	BRNE VPD6
+	btC:
+	IN R26, PINC
+	CP R26, R20
+	BRNE FIN
 	CALL DELAY
-	IN   R16, PINC
-	ANDI R16, 0b00100000
-	BRNE VPD6
+	IN R26, PINC
+	CP R26, R20
+	BRNE FIN
 	CALL SUMAR
 
-	VPD6:
-	; ---- PD6 (NC) ----
-	IN   R16, PIND
-	ANDI R16, 0b01000000
-	BREQ VPD7
-	CALL DELAY
-	IN   R16, PIND
-	ANDI R16, 0b01000000
-	BREQ VPD7
-	CALL CONTAR2up
-
-	VPD7:
-	; ---- PD7 (NC) ----
-	IN   R16, PIND
-	ANDI R16, 0b10000000
-	BREQ FIN_LECTURA
-	CALL DELAY
-	IN   R16, PIND
-	ANDI R16, 0b10000000
-	BREQ FIN_LECTURA
-	CALL CONTAR2dn
-
-	FIN_LECTURA:
+	FIN:
 	RJMP MAIN_LOOP
+		
 
+	
+/****************************************/
+// NON-Interrupt subroutines	
 
+CONTADOR1:
+	ANDI R22, 0x40
+	BREQ resta1
+	LSR R23
+	LSR R23
+	CPI R23, 0b00001111
+	BREQ REGRESAR1
+	INC R23
+	LSL R23
+	LSL R23
+	OR R17, R23
+	MOV R16, R17
+	OUT PORTD, R16
+	RJMP REGRESAR1
 
-CONTAR1up:
-	IN R18, PORTB
-	ANDI R18, 0b11110000
-	CPI R17, 0b00001111
-	BRSH regresar1
-	INC R17
-	OR R18, R17
+	resta1:
+	LSR R23
+	LSR R23
+	CPI R23, 0b00000000
+	BREQ REGRESAR1
+	DEC R23
+	LSL R23
+	LSL R23
+	OR R17, R23
+	MOV R16, R17
+	OUT PORTD, R16
+	
+	REGRESAR1:
+	RET
+
+CONTADOR2:
+	ANDI R24, 0b0001000
+	BRNE resta2
+	CPI R25, 0b00001111
+	BREQ REGRESAR2
+	INC R25
+	OR R19, R25
+	MOV R18, R19
 	OUT PORTB, R18
-	regresar1: 
-	RET
+	RJMP REGRESAR2
 
-CONTAR1dn:
-	IN R18, PORTB
-	ANDI R18, 0b11110000
-	TST R17
-	BREQ regresar2
-	DEC R17
-	OR R18, R17
+	resta2:
+	CPI R25, 0b00000000
+	BREQ REGRESAR2
+	DEC R25
+	OR R19, R25
+	MOV R18, R19
 	OUT PORTB, R18
 
-	regresar2: 
-	RET
-
-CONTAR2up:
-	IN R19, PORTD
-	ANDI R19, 0b11000011
-	CPI R20, 0b00111100
-	BRSH regresar3
-	LSR R20
-	LSR R20
-	INC R20
-	LSL R20
-	LSL R20
-	OR R19, R20
-	OUT PORTD, R19
-
-	regresar3: 
-	RET
-
-CONTAR2dn:
-	IN R19, PORTD
-	ANDI R19, 0b11000011
-	LSR R20
-	LSR R20
-	TST R20
-	BREQ regresar4
-	DEC R20
-	LSL R20
-	LSL R20
-	OR R19, R20
-	OUT PORTD, R19
-	regresar4: 
+	REGRESAR2:
 	RET
 
 SUMAR:
-	MOV R21, R17
-	LSR R20
-	LSR R20
-	ADD R21, R20
-	LSL R20
-	LSL R20
-	CPI R21, 0b00010000
-	BRSH CARRY
-	IN R22, PORTC
-	ANDI R22, 0b11110000
-	OR R22, R21
-	OUT PORTC, R22
-	CBI PORTB, PORTB5
-	RJMP regresar5
+	MOV R27, R23
+	LSR R27
+	LSR R27
+	ADD R27, R25
+	CPI R27, 0b00001111
+	BRSH carry
+	CBI PORTC, PORTC4
+	OR R21,R27
+	MOV R20, R21
+	OUT PORTC, R20
+	RJMP REGRESAR3
+	carry:
+	SBI PORTC, PORTC4
+	ANDI R27, 0b00001111
+	OR R21,R27
+	MOV R20, R21
+	OUT PORTC, R20
 
-	CARRY:
-	IN R22, PORTC
-	ANDI R22, 0b11110000
-	ANDI R21, 0b00001111
-	OR R22, R21
-	OUT PORTC, R22
-	SBI PORTB, PORTB5
-
-	regresar5:
+	REGRESAR3:
 	RET
 
 DELAY:
-    LDI  R29, 255
+    LDI  R29, 10
 L1:
-    LDI  R30, 255
+    LDI  R30, 200
 L2:
+    LDI  R31, 200
+L3:
+    DEC  R31
+    BRNE L3
     DEC  R30
     BRNE L2
     DEC  R29
