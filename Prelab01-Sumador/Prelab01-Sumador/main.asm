@@ -1,5 +1,5 @@
 /*
-* Prelab01-Sumador
+* laboratorio1-Sumador
 *
 * Creado: 01/02/2026 - 12:00
 * Autor : Abner Quiej
