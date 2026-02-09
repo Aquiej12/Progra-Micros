@@ -89,7 +89,7 @@ CBI PORTC, PORTC1   // Inicialmente apagado el PC1
 CBI PORTC, PORTC2   // Inicialmente apagado el PC2
 CBI PORTC, PORTC3   // Inicialmente apagado el PC3
 
-
+//Limpiar registros a utilizar
 CLR R17
 CLR R16
 CLR R20
@@ -98,19 +98,21 @@ CLR R21
 /****************************************/
 // Loop Infinito
 MAIN_LOOP:
+//Verificar que boton se presiono
 // ---- PB4 (NO) ----
-	IN   R16, PINB
-	ANDI R16, 0b00010000
-	BRNE VPB5
-	CALL DELAY
-	IN   R16, PINB
-	ANDI R16, 0b00010000
-	BRNE VPB5
-	CALL CONTAR1up
+	IN   R16, PINB				//Guardar lo que haya en PINB
+	ANDI R16, 0b00010000		//Evualuar si se preciono justamente ese boton
+	BRNE VPB5					//Nah no era ese, revisemos otro
+	CALL DELAY					//ummm parece que si, esperemos a ver si si era
+	IN   R16, PINB				//sera que si lo apacharon?
+	ANDI R16, 0b00010000		// revicemos nuevamente
+	BRNE VPB5					//nah, falsa alarma, revisa otro
+	CALL CONTAR1up				// :O si era, bueno, ahorita aviso que hay que contar pa arriba
 
+	//Con los botones es basicamente lo mismo, se omite la explicacion
 	VPB5:
 	; ---- PC4 (NO) ----
-	IN   R16, PINC
+	IN   R16, PINC				
 	ANDI R16, 0b00010000
 	BRNE VPC5
 	CALL DELAY
@@ -153,23 +155,24 @@ MAIN_LOOP:
 	CALL CONTAR2dn
 
 	FIN_LECTURA:
-	RJMP MAIN_LOOP
+	RJMP MAIN_LOOP		//Volver a iniciar la lectura de los botones
 
 
-
+	//contar para arriba del primer grupo de bits
 CONTAR1up:
-	IN R18, PORTB
-	ANDI R18, 0b11110000
-	CPI R17, 0b00001111
-	BRSH regresar1
-	INC R17
-	OR R18, R17
-	OUT PORTB, R18
-	regresar1: 
-	RET
+	IN R18, PORTB				//Guardar lo que haya en el PORTB
+	ANDI R18, 0b11110000		//Guardar solo los 4 mas significativos
+	CPI R17, 0b00001111			//comparar si r17 ya es 15
+	BRSH regresar1				// si es 15, no habra incremento
+	INC R17						// si no era 15, le sumamos 1 al registro
+	OR R18, R17					// fusionamos los 4 mas significativos de R18 y los 4 menos significativos del r17
+	OUT PORTB, R18				//presentamos la fusion en PORTB
+	regresar1:				
+	RET							// se termina la funcion
 
+	//la logica es la misma que la anterior 
 CONTAR1dn:
-	IN R18, PORTB
+	IN R18, PORTB				
 	ANDI R18, 0b11110000
 	TST R17
 	BREQ regresar2
@@ -180,22 +183,25 @@ CONTAR1dn:
 	regresar2: 
 	RET
 
-CONTAR2up:
-	IN R19, PORTD
-	ANDI R19, 0b11000011
-	CPI R20, 0b00111100
-	BRSH regresar3
-	LSR R20
-	LSR R20
-	INC R20
-	LSL R20
-	LSL R20
-	OR R19, R20
-	OUT PORTD, R19
+
+	//aca hay truco
+CONTAR2up:	
+	IN R19, PORTD				//Guardamos lo que haya en PORTD
+	ANDI R19, 0b11000011		//Guardamos solo los bits de configuracion, los otros son donde estan las leds
+	CPI R20, 0b00111100			//comparamos si en esas leds ya hay un 15 en binario
+	BRSH regresar3				//si ya hay, entonces no se hace nada
+	LSR R20						//si si, se corre un bit hacia la derecha
+	LSR R20						//otro bit a la derecha para que el numero guardado en las leds se pueda manipular
+	INC R20						//se le suma uno al registro/leds 
+	LSL R20						//se corre hacia la izquierda
+	LSL R20						//se devuelve a donde normalmente estaba
+	OR R19, R20					//se fusionan para armar los 8bits completos
+	OUT PORTD, R19				//la fusion es presentada en los leds
 
 	regresar3: 
-	RET
-
+	RET							//termina esta funcion
+		
+		//para esto es lo mismo xd
 CONTAR2dn:
 	IN R19, PORTD
 	ANDI R19, 0b11000011
@@ -211,24 +217,26 @@ CONTAR2dn:
 	regresar4: 
 	RET
 
+
 SUMAR:
-	MOV R21, R17
+	MOV R21, R17				//copiamos lo guardado en r17 en un registro de operacion
+	LSR R20						//vovlemos a colocar el r20 de manera tal que podamos operar
 	LSR R20
-	LSR R20
-	ADD R21, R20
+	ADD R21, R20				//sumamos ambos registros
+	LSL R20						//devolvemos r20 a su lugar
 	LSL R20
-	LSL R20
-	CPI R21, 0b00010000
-	BRSH CARRY
-	IN R22, PORTC
-	ANDI R22, 0b11110000
-	OR R22, R21
-	OUT PORTC, R22
-	CBI PORTB, PORTB5
+	CPI R21, 0b00010000			//comparamos si no se pasa de 15
+	BRSH CARRY					//si si activamos carry para encender la led
+	IN R22, PORTC				//si no, nomas copiamos lo que este en C
+	ANDI R22, 0b11110000		//guardamos lo que nos importa
+	OR R22, R21					//fusionamos y obtenemos nuestros 8 bits
+	OUT PORTC, R22				//presentamos la fusion en el PORTC
+	CBI PORTB, PORTB5			//apagamos el led e carry porque no hay :v
 	RJMP regresar5
 
+	//es lo mismo que antes, nomas que aca si se activa el carry 
 	CARRY:
-	IN R22, PORTC
+	IN R22, PORTC			
 	ANDI R22, 0b11110000
 	ANDI R21, 0b00001111
 	OR R22, R21
@@ -237,7 +245,7 @@ SUMAR:
 
 	regresar5:
 	RET
-
+//DELAY de toda la vida
 DELAY:
     LDI  R29, 255
 L1:
