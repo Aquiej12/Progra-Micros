@@ -1,10 +1,15 @@
 /*
-* laboratorio1-Sumador
+* laboratorio2-Botones y Timer 0
 *
-* Creado: 01/02/2026 - 12:00
+* Creado: 16/02/2026 - 12:00
 * Autor : Abner Quiej
-* Descripcion: Contador binario de 4 bits en el que cada incremento es realizado cada
-100ms, utilizando el timer0.
+* Descripcion: Contador binario de 4 bits del prelaboratorio
+para que el contador se incrementará cada 1s. Importante, el timer0 seguirá
+incrementando cada 100ms.
+En el momento que el contador de segundos sea igual al contador de los botones,
+deberá reiniciar el contador de segundos y cambiar el estado de una LED (de 0-
+>1 o de 1->0 durante un ciclo entero). De manera que pueda variar el periodo del
+encendido y apagado del indicador utilizando los botones.
 
 */
 /****************************************/
