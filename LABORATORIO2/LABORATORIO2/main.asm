@@ -15,7 +15,15 @@
 //variable_name: .byte 1 // Memory alocation for variable_name: .byte (byte size)
 .cseg
 .org 0x0000
+	RJMP RESET
+
+ .org OVF0addr
+	RJMP TIMER0_OVF:
+
+
+
 /****************************************/
+
 
 // Configuracion de la pila
 LDI R16, LOW(RAMEND)
@@ -23,11 +31,21 @@ OUT SPL, R16
 LDI R16, HIGH(RAMEND)
 OUT SPH, R16
 /****************************************/
+
+disp7seg: .DB 0x40, 0x79, 0x24, 0x30, 0x19, 0x12, 0x02, 0x78, 0x00, 0x10, 0x08, 0x03, 0x46, 0x21, 0x06, 0x0E
 // Configuracion MCU
 SETUP:
 // Configurar entradas y salidas
-// Input -> PB4, PB5, PC5
 
+//Habilitar cambio del prescaler (ventana de 4 ciclos)
+LDI R16, (1<<CLKPCE)
+STS CLKPR, R16
+
+//Configurar división entre 8
+LDI R16, 0b00000011    ; CLKPS = 0011 ? divide entre 8
+STS CLKPR, R16
+
+// Input -> PB4, PB5, PC5
 CBI DDRC, DDC4 // Poniendo en 0, el bit 4 de DDRC -> Input
 CBI DDRC, DDC5 // Poniendo en 0, el bit 5 de DDRC -> Input
 
@@ -60,71 +78,82 @@ CBI PORTB, PORTB5   // Inicialmente apagado el PB3
 //CALCULANDO EL PRESCALER.
 	//CON:
 		//	- TIMER0=8BITS
-		//	- Fclk=16MHz
-		//	- PreScaler=64
-		//	- Overflow==1.024ms
-		// --->100ms/1.024ms==97.6
+		//	- Fclk=2000000 Hz
+		//	- PreScaler=1024
+		//	- Overflow==0.09984 s
 
 //Configuracion del TIMER0
 LDI R16, 0x00
-OUT TCCR0A, R16
+OUT TCCR0A, R16			//Modo normal (cuenta de 0 a 255).
 
-LDI R16, 0b00000011
+LDI R16, 0b00000101		//prescaler de 1024
 OUT TCCR0B, R16
 
-LDI R16, 0X00
+LDI R16, 59			//el contador empieza en 59
 OUT TCNT0, R16
 
-LDI R16, 0b0000001
+LDI R16, 0b0000001		//Habilitar interrupciones del timer0
 STS TIMSK0, R16
 
 SEI
+//
+//PARA USAR EL PORTD COMPLETO (DESACTIVAR RX Y TX
+LDI R18, 0x00
+STS UCSR0B, R18
 
-//Limpiar registros a utilizar
-CLR R17
-CLR R16
-CLR R20
-CLR R21
+CLR R18
+
+
+
 
 /****************************************/
 // Loop Infinito
 
 MAIN_LOOP:
-
-
-//Verificar banderas del timer0
-	IN R16, TIFR0			//Guardar banderas del Timer0
-	SBRS R16, TOV0			//Comparar si hubo Overflow
-	RJMP MAIN_LOOP			//si no, regresaral MAINLOOP
-
-	SBI	TIFR0, TOV0			//Si hubo overflow, limpiamos la bandera
-	LDI R16, 0
-	OUT TCNT0, R16			//recargar timer0 (10ms)
-	INC R17					// Contar que ya pasaron n(10ms)
-	CPI R17, 98				// n ya es 10??
-	BRNE MAIN_LOOP			// si no, volver al mainloop
-	CLR R17					// si si es, se limpia el contador
-
-
-	CALL CONTAR1up				// :O si era, bueno, ahorita aviso que hay que contar pa arriba
-	RJMP MAIN_LOOP
+    RJMP MAIN_LOOP
 
 CONTAR1up:
 	IN R18, PORTB				//Guardar lo que haya en el PORTB
 	ANDI R18, 0b11110000		//Guardar solo los 4 mas significativos
-	CPI R19, 0b00001111			//comparar si r17 ya es 15
+	CPI R19, 0b00001111			//comparar si r19 ya es 15
 	BRSH regresar1				// si es 15, regresar a 0
 	INC R19						// si no era 15, le sumamos 1 al registro
-	OR R18, R19					// fusionamos los 4 mas significativos de R18 y los 4 menos significativos del r17
+	OR R18, R19					// fusionamos los 4 mas significativos de R18 y los 4 menos significativos del r19
 	OUT PORTB, R18				//presentamos la fusion en PORTB
 	RJMP REGRESAR
 	regresar1:				
 	ANDI R19, 0b00000000
-	OR R18, R19					// fusionamos los 4 mas significativos de R18 y los 4 menos significativos del r17
+	OR R18, R19					// fusionamos los 4 mas significativos de R18 y los 4 menos significativos del r19
 	OUT PORTB, R18				//presentamos la fusion en PORTB
 	REGRESAR:
 	RET							// se termina la funcion
 
-/****************************************/
-// Interrupt routines
-/****************************************/
+///****************************************/
+//// Interrupt routines
+///****************************************/
+TIMER0_OVF:
+	PUSH R16
+	IN R16, SREG
+	PUSH R16
+    PUSH R17
+
+	//recargamos para volver a contar 100ms
+	LDI R16, 61
+	OUT TCNT0, R16
+
+	//CONTAMOS 1S
+	INC R17
+	CPI R17, 10		//Ya es 10?
+	BRNE SALIR		// nop, entonces salir
+	//si es, modificamos los registros 
+	CLR R17			// limpiamos la cuenta
+	INC R18
+	ANDI R18, 0b00001111
+	OUT PORTB, R18
+
+	SALIR:
+	POP R17
+	POP R16
+	OUT SREG, R16
+	POP R16
+	RETI
