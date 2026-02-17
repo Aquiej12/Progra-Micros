@@ -10,7 +10,11 @@ para que el contador se incrementará cada interrupcion
 /****************************************/
 // Encabezado (Definici n de Registros, Variables y Constantes)?
 .include "M328PDEF.inc" // Include definitions specific to ATMega328P
-.def counter = R20        ; Registro para el contador de 4 bits
+.def counter = R20        // Registro para el contador de 4 bits
+.def counterdisp1 = R19		// Registro para el contador hex, unidades
+
+
+
 .dseg
 .org SRAM_START
 //variable_name: .byte 1 // Memory alocation for variable_name: .byte (byte size)
@@ -20,7 +24,6 @@ para que el contador se incrementará cada interrupcion
 
 .org PCI1addr 
     RJMP ISR_PCINT1
-
 
  .org OVF0addr
 	RJMP TIMER0_OVF
@@ -75,15 +78,16 @@ CBI PORTB, PORTB4   // Inicialmente apagado el PB4
     // Habilitar específicamente los pines PCINT11 (PC3) y PCINT12 (PC4)
     LDI R17, (1 << PCINT11) | (1 << PCINT12)
     STS PCMSK1, R17
-	//CALCULANDO EL PRESCALER.
-	//CON:
+
+//CALCULANDO EL PRESCALER.
+//CON:
 		//	- TIMER0=8BITS
 		//	- Fclk=16000000 Hz
 		//	- PreScaler=1024
 		//	- Overflow==0.009984 s
 
 //Configuracion del TIMER0
-    ; Modo Normal (WGM01=0, WGM00=0)
+    // Modo Normal (WGM01=0, WGM00=0)
     LDI R16, 0x00
     OUT TCCR0A, R16
 
@@ -118,15 +122,26 @@ CLR R1
 
 
 MAIN_LOOP:
-ANDI R19, 0b00001111	// solo queremos cuenta de 0 a 15
+ANDI counterdisp1, 9					// solo queremos cuenta de 0 a 9
+
 	LDI ZH, HIGH(disp7seg<<1)
 	LDI ZL, LOW(disp7seg<<1)
-
-	ADD	ZL, R19				// apuntar segun el r19
+	//Desplazar Z a poscicion
+	ADD	ZL, counterdisp1				// apuntar segun el r19
 	ADC ZH, R1				// R1 debe ser 0 (registro 0)
-
 	LPM R23, Z				// Guardar lo apuntado en z
+	SBI //NPN
 	OUT PORTD, R23			// Mostrar lo apuntado en z
+	// Nuevamente para el segundo Display	
+	LDI ZH, HIGH(disp7seg<<1)
+	LDI ZL, LOW(disp7seg<<1)
+	//Dezplasar a segunda poscicion 
+	ADD	ZL, counterdisp2				// apuntar segun el 
+	ADC ZH, R1				// R1 debe ser 0 (registro 0)
+	LPM R23, Z				// Guardar lo apuntado en z
+	CBI //NPN
+
+
 	OUT PORTB, counter
 	RJMP MAIN_LOOP
 ///****************************************/
@@ -196,7 +211,8 @@ TIMER0_OVF:
 	DEC  R18
 	BRNE REGRESAR		   // Si no es 0, salir
     LDI  R18, 100			//nuevamente contar 0.01s 100 veces = 1segundo
-	INC R19
+	INC counterdisp1
+	
 
 	REGRESAR:
 	POP  R21

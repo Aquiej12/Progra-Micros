@@ -83,7 +83,7 @@ CBI PORTB, PORTB4   // Inicialmente apagado el PB4
 		//	- TIMER0=8BITS
 		//	- Fclk=2000000 Hz
 		//	- PreScaler=1024
-		//	- Overflow==0.009984 s
+		//	- Overflow==0.09984 s
 
 //Configuracion del TIMER0
     ; Modo Normal (WGM01=0, WGM00=0)
