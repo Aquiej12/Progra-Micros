@@ -1,10 +1,14 @@
 /*
-* Prelaboratorio3-Interrupciones
+* laboratorio3-Interrupciones
 *
 * Creado: 16/02/2026 - 12:00
 * Autor : Abner Quiej
-* Descripcion: Contador binario de 4 bits del prelaboratorio
-para que el contador se incrementará cada interrupcion
+* Descripcion: Implementacion un contador de “decenas”. Cada vez que el contador con el TMR0 llegue a
+10 deberá de resetearlo e incrementar el contador de decenas en un segundo display de
+7 segmentos, de manera que se muestren las decenas de segundos.
+Consideraciones
+- Cuando éste llegue a 60s deberá de reiniciar ambos contadores.
+- Los display de 7 segmentos deben estar conectados al mismo puerto
 
 */
 /****************************************/
@@ -127,7 +131,6 @@ CLR R21
 MAIN_LOOP:
 	
 	
-
 	LDI ZH, HIGH(disp7seg<<1)
 	LDI ZL, LOW(disp7seg<<1)
 	//Desplazar Z a poscicion
