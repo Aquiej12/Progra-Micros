@@ -12,6 +12,7 @@ para que el contador se incrementará cada interrupcion
 .include "M328PDEF.inc" // Include definitions specific to ATMega328P
 .def counter = R20        // Registro para el contador de 4 bits
 .def counterdisp1 = R19		// Registro para el contador hex, unidades
+.def counterdisp2 = R21		// Registro para el contador hex, decenas
 
 
 
@@ -71,7 +72,7 @@ CBI PORTB, PORTB0   // Inicialmente apagado el PB0
 CBI PORTB, PORTB1   // Inicialmente apagado el PB1
 CBI PORTB, PORTB2   // Inicialmente apagado el PB2
 CBI PORTB, PORTB3   // Inicialmente apagado el PB3
-CBI PORTB, PORTB4   // Inicialmente apagado el PB4
+
 
 ; Habilitar el grupo PCIE1 (Puerto C)
     LDI R17, (1 << PCIE1)
@@ -120,9 +121,12 @@ disp7seg: .DB 0x40, 0x79, 0x24, 0x30, 0x19, 0x12, 0x02, 0x78, 0x00, 0x10, 0x08, 
 CLR R19
 CLR R18
 CLR R1
+CLR R21
 
 
 MAIN_LOOP:
+	
+	
 
 	LDI ZH, HIGH(disp7seg<<1)
 	LDI ZL, LOW(disp7seg<<1)
@@ -132,10 +136,15 @@ MAIN_LOOP:
 	LPM R23, Z				// Guardar lo apuntado en z
 	//Apagamos el display de decenas
 	SBI PORTB, PB5
+LDI  R27, 20
+minidelay:
+    DEC  R27
+    BRNE minidelay
 	//Encendemos el display de unidades
 	CBI PORTB, PB4
 	// Mostrar lo apuntado en z
 	OUT PORTD, R23			
+	
 
 	// Nuevamente para el segundo Display	
 	LDI ZH, HIGH(disp7seg<<1)
@@ -146,14 +155,27 @@ MAIN_LOOP:
 	LPM R23, Z				// Guardar lo apuntado en z
 	//Apagamos el display de unidades
 	SBI PORTB, PB4
+
+	//para evitar numeros fantasma
+	LDI  R27, 20
+	minidelay2:
+    DEC  R27
+    BRNE minidelay2
 	//Encendemos el display de decenas
 	CBI PORTB, PB5
 	// Mostrar lo apuntado en z
 	OUT PORTD, R23	
 
 
-	ANDI counter, 0b00001111
-	OUT PORTB, counter
+	IN R22, PORTB        ; Leemos el estado actual de PORTB (donde están PB4 y PB5)
+    ANDI R22, 0b11110000 ; Limpiamos los bits 0-3 (borramos el conteo viejo)
+    
+    MOV R23, counter     ; Copiamos el contador a un registro temporal (no uses R16 si está ocupado)
+    ANDI R23, 0b00001111 ; Nos aseguramos de que solo tenga 4 bits
+    
+    OR R22, R23          ; Combinamos: bits 4-7 (displays) + bits 0-3 (conteo)
+    OUT PORTB, R22       ; Escribimos al puerto sin apagar los displays
+	
 	RJMP MAIN_LOOP
 ///****************************************/
 //// Interrupt routines
@@ -165,40 +187,42 @@ ISR_PCINT1:
     PUSH R16
 	PUSH R24
 	PUSH R25
-	PUSH R21
-
-//ANTIRREBOTE
-LDI  R24, 255
-DELAY_ISR:
-    LDI  R25, 255
-DELAY_INNER:
-    DEC  R25
-    BRNE DELAY_INNER
-    DEC  R24
-    BRNE DELAY_ISR
+	PUSH R22
 
     ; Leer el estado de los pines (Activos en BAJO por pull-up)
     IN R17, PINC
     
-    ; Debido a que la interrupción ocurre en ambos flancos (0->1 y 1->0),
-    ; verificamos si el botón está presionado (es decir, el bit es 0).
+		// Ignorar cambios en PC3 y PC4 momentáneamente
+    LDI  R22, 0x00
+    STS  PCMSK1, R22
+
+    ANDI R17, 0b00011000 ; Aislamos PC3 y PC4
     
-CHECK_INC:
-    SBRC R17, PORTC3     ; Si PC3 es 0, salta la siguiente instrucción
-    RJMP CHECK_DEC        ; Si es 1 (suelto), saltar a revisar el otro
-    ; Acción Incrementar
-    INC counter
+    CPI  R17, 0x10       ; Solo PC3 presionado (Incrementar)
+    BREQ DO_INC
+    
+    CPI  R17, 0x08       ; Solo PC4 presionado (Decrementar)
+    BREQ DO_DEC
+
+	RJMP EXIT_ISR
+
+DO_INC:
+    INC  counter
     RJMP EXIT_ISR
 
-CHECK_DEC:
-    SBRC R17, PORTC4     ; Si PC4 es 0, salta la siguiente instrucción
-    RJMP EXIT_ISR         ; Si es 1 (suelto), salir
-    ; Acción Decrementar
-    DEC counter
-
+DO_DEC:
+    DEC  counter
 
 EXIT_ISR:
-	POP  R21
+	//Borramos cualquier interrupción "encolada"
+	LDI  R22, (1<<PCIF1)
+    OUT  PCIFR, R22     
+
+    // Habilitar nuevamente PC3 y PC4 ---
+    LDI  R22, (1 << PCINT11) | (1 << PCINT12)
+    STS  PCMSK1, R22
+	//restaurar registros
+	POP R22
 	POP  R25
 	POP	 R24
     POP  R16
@@ -215,7 +239,7 @@ TIMER0_OVF:
     PUSH R16
 	PUSH R24
 	PUSH R25
-	PUSH R21
+	PUSH R22
 	; Recargar 99 para mantener 100 ms
     LDI  R16, 99
     OUT  TCNT0, R16
@@ -235,7 +259,7 @@ TIMER0_OVF:
 	CLR counterdisp2
 
 	REGRESAR:
-	POP  R21
+	POP	 R22
 	POP  R25
 	POP	 R24
     POP  R16
