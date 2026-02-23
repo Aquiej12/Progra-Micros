@@ -63,6 +63,7 @@ SBI DDRB, DDB1 // Poniendo en 1, el bit 1 de DDRB -> Output
 SBI DDRB, DDB2 // Poniendo en 1, el bit 2 de DDRB -> Output
 SBI DDRB, DDB3 // Poniendo en 1, el bit 3 de DDRB -> Output
 SBI DDRB, DDB4 // Poniendo en 1, el bit 4 de DDRB -> Output
+SBI DDRB, DDB5 // Poniendo en 1, el bit 5 de DDRB -> Output
 
 
 // Puerto B -> PB0, PB1, PB2, PB3
@@ -122,26 +123,36 @@ CLR R1
 
 
 MAIN_LOOP:
-ANDI counterdisp1, 9					// solo queremos cuenta de 0 a 9
 
 	LDI ZH, HIGH(disp7seg<<1)
 	LDI ZL, LOW(disp7seg<<1)
 	//Desplazar Z a poscicion
-	ADD	ZL, counterdisp1				// apuntar segun el r19
+	ADD	ZL, counterdisp1	// apuntar segun la cuenta de  unidades
 	ADC ZH, R1				// R1 debe ser 0 (registro 0)
 	LPM R23, Z				// Guardar lo apuntado en z
-	SBI //NPN
-	OUT PORTD, R23			// Mostrar lo apuntado en z
+	//Apagamos el display de decenas
+	SBI PORTB, PB5
+	//Encendemos el display de unidades
+	CBI PORTB, PB4
+	// Mostrar lo apuntado en z
+	OUT PORTD, R23			
+
 	// Nuevamente para el segundo Display	
 	LDI ZH, HIGH(disp7seg<<1)
 	LDI ZL, LOW(disp7seg<<1)
 	//Dezplasar a segunda poscicion 
-	ADD	ZL, counterdisp2				// apuntar segun el 
+	ADD	ZL, counterdisp2	// apuntar segun las decenas
 	ADC ZH, R1				// R1 debe ser 0 (registro 0)
 	LPM R23, Z				// Guardar lo apuntado en z
-	CBI //NPN
+	//Apagamos el display de unidades
+	SBI PORTB, PB4
+	//Encendemos el display de decenas
+	CBI PORTB, PB5
+	// Mostrar lo apuntado en z
+	OUT PORTD, R23	
 
 
+	ANDI counter, 0b00001111
 	OUT PORTB, counter
 	RJMP MAIN_LOOP
 ///****************************************/
@@ -212,7 +223,16 @@ TIMER0_OVF:
 	BRNE REGRESAR		   // Si no es 0, salir
     LDI  R18, 100			//nuevamente contar 0.01s 100 veces = 1segundo
 	INC counterdisp1
-	
+	CPI counterdisp1, 10
+	BREQ DECENAS
+	RJMP REGRESAR
+
+	DECENAS:
+	CLR counterdisp1
+	INC counterdisp2
+	CPI counterdisp2, 6
+	BRNE REGRESAR
+	CLR counterdisp2
 
 	REGRESAR:
 	POP  R21
