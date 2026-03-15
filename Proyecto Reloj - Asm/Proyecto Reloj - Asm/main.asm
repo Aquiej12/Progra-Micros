@@ -28,7 +28,7 @@ Consideraciones
 
 
 // definir modo de trabajo del reloj
-.equ VELOCIDAD = 15625 
+.equ VELOCIDAD = 1953 
 ; 15625  = EXACTO
 ; 1953 = RAPIDO
 
@@ -168,7 +168,7 @@ CBI PORTB, PORTB5   // Inicialmente apagado el PB5
 	CLR R16
 
    ; Prescaler
-	LDI R16, (1<<CS00)
+	LDI R16, (1<<CS01)|(1<<CS00)
 	OUT TCCR0B, R16
 
     ; Habilitar interrupción por overflow
@@ -480,20 +480,30 @@ TIMER0_OVF:
 
 
 // Operacion
-	INC DPLY_ENCENDIDO
-	CPI DPLY_ENCENDIDO, 4
-	BRNE Apagar_Displays
-    CLR DPLY_ENCENDIDO
+INC DPLY_ENCENDIDO
+CPI DPLY_ENCENDIDO, 4
+BRLO Apagar_Displays    ; si < 4, sigue normal
+CLR DPLY_ENCENDIDO      ; si >= 4, resetea
 
 
 	Apagar_Displays:
     IN R16, PORTB
-    ORI R16, 0x0F      
+    ORI R16, 0x0F       ; apaga transistores (PB0-PB3)
     OUT PORTB, R16
 
-	IN R16, PORTD
-    ORI R16, 0x7F       
+    IN R16, PORTD
+    ORI R16, 0x7F
     OUT PORTD, R16
+
+    ; --- delay de blanking ---
+    PUSH R17
+    LDI R17, 50
+blank_loop:
+    DEC R17
+    BRNE blank_loop
+    POP R17
+
+	  ; --- elegir datos según modo ---
 
 	CPI MODE, 0b000
 	BREQ MODO_horario
@@ -585,12 +595,10 @@ Activar_Transistor:
     ADC ZH, R1
     LPM R16, Z             
 
-    IN R17, PORTB           
-    ORI R17, 0x0F           
-                                
-    AND R17, R16            
-    
-    OUT PORTB, R17          
+ IN R17, PORTB
+    ANDI R17, 0xF0         ; Limpia bits 0-3, conserva 4-7
+    OR R17, R16            ; Combina solo los bits bajos
+    OUT PORTB, R17         
 
 Salir_Timer0:
    	// Retornar Contexto
