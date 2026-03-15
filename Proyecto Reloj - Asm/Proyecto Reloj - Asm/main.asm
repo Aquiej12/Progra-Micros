@@ -17,8 +17,7 @@ Consideraciones
 
 .def DPLY_ENCENDIDO		= R18
 .def BANDERA			= R19
-.def SEGUNDOS_U			= R20        // Registro para el contador de 4 bits
-.def SEGUNDOS_D			= R21		// Registro para el contador hex, decenas
+.def SEGUNDOS			= R20        // Registro para el contador de 4 bits
 .def MODE				= R22
 .def INDICE				= R23
 .def MES_ACTUAL			= R24
@@ -39,6 +38,8 @@ Consideraciones
 .dseg
 .org SRAM_START
 //variable_name:	.byte 1  // Memory alocation for variable_name: .byte (byte size)
+	VAR_MINUTOS_U:		.byte 1  // Reserva 1 byte para Unidades de Hora
+	VAR_MINUTOS_D:		.byte 1  // Reserva 1 byte para Horas
 	VAR_HORAS_U:		.byte 1  // Reserva 1 byte para Unidades de Hora
 	VAR_HORAS_D:		.byte 1  // Reserva 1 byte para Horas
     VAR_DIAS_U:		.byte 1  // Reserva 1 byte para Días
@@ -82,12 +83,20 @@ LDI R16, HIGH(RAMEND)
 OUT SPH, R16
 
 /****************************************/
+/****************************************/
 // --- INICIALIZAR VARIABLES EN SRAM ---
-    //LDI R16, 0              ; O el valor inicial que quieras (ej. día 1)
-    //STS VAR_HORAS, R16
-    //STS VAR_DIAS, R16
-    //STS VAR_MES, R16
-
+LDI R16, 0
+STS VAR_MINUTOS_U, R16
+STS VAR_MINUTOS_D, R16
+STS VAR_HORAS_U, R16
+STS VAR_HORAS_D, R16
+CLR SEGUNDOS
+LDI R16, 1
+STS VAR_MES_U, R16
+STS VAR_DIAS_U, R16    ; Unidad del día = 1
+CLR R16
+STS VAR_DIAS_D, R16    ; Decena del día = 0
+STS VAR_MES_D, R16    ; Decena del día = 0
 ;========================================
 // Configurar entradas y salidas
 ;========================================
@@ -158,9 +167,9 @@ CBI PORTB, PORTB5   // Inicialmente apagado el PB5
 	OUT TCNT0, R16
 	CLR R16
 
-    ; Prescaler = 1024 (CS02=1, CS00=1)
-    LDI R16, (1<<CS02)|(1<<CS00)
-    OUT TCCR0B, R16
+   ; Prescaler
+	LDI R16, (1<<CS00)
+	OUT TCCR0B, R16
 
     ; Habilitar interrupción por overflow
     LDI R16, (1<<TOIE0)
@@ -218,7 +227,7 @@ STS UCSR0B, R18
 	disp7seg: .DB 0x40, 0x79, 0x24, 0x30, 0x19, 0x12, 0x02, 0x78, 0x00, 0x10, 0x08, 0x03, 0x46, 0x21, 0x06, 0x0E
 
 	// Multiplexacion de 4 Displays Anodo Comun
-	multDisp: .DB 0b0001, 0b0010, 0b0100, 0b1000
+	multDisp: .DB 0b1110, 0b1101, 0b1011, 0b0111
 	
 	// Palabra "ON" en Display 7 segmentos Anodo Común
 	
@@ -228,7 +237,7 @@ STS UCSR0B, R18
 	dispOFF:  .DB 0b00000001, 0b01110001
 
 	// Días máximos de cada mes (El primer 0 es relleno para el mes 0)
-	tabla_meses: .DB 0x00, 0x31, 0x28, 0x31, 0x30, 0x31, 0x30, 0x31, 0x31, 0x30, 0x31, 0x30, 0x31, 0x00
+	tabla_meses: .DB 0x00, 0x32, 0x29, 0x32, 0x31, 0x32, 0x31, 0x32, 0x32, 0x31, 0x32, 0x31, 0x32, 0x00
 ;========================================
 // LIMPIAR REGISTROS
 ;========================================
@@ -237,7 +246,7 @@ CLR R19
 CLR R18
 CLR R1
 CLR R21
-
+CLR MODE
 
 ;========================================
 // LOOP INFINITO
@@ -245,101 +254,6 @@ CLR R21
 
 MAIN_LOOP:
 
-	LDS R16, VAR_MES
-
-	LDI ZH, HIGH(tabla_meses<<1)
-	LDI ZL, LOW(tabla_meses<<1)
-	ADD	ZL, R16			// apuntar segun el registro indice
-	ADC ZH, R1				// R1 debe ser 0 (registro 0)
-	LPM MES_ACTUAL, Z				// Guardar lo apuntado en Z
-	CLR R16
-
-	CPI MODE, 0b000
-	BREQ MODE_S0
-
-	CPI MODE, 0b001
-	BREQ MODE_S1
-
-	CPI MODE, 0b010
-	BREQ MODE_S2
-
-	CPI MODE, 0b011
-	BREQ MODE_S3
-
-	CPI MODE, 0b100
-	BREQ MODE_S4
-
-	CPI MODE, 0b101
-	BREQ MODE_S5
-
-	CPI MODE, 0b101
-	BREQ MODE_S6
-
-
-	RJMP MAIN_LOOP
-
-
-
-	MODE_S0:
-	SBI PORTB, PORTB5   ; Enciende el PB5 (HORA)
-
-	LDI ZH, HIGH(disp7seg<<1)
-	LDI ZL, LOW(disp7seg<<1)
-
-	//Desplazar Z a poscicion
-	
-	ADD	ZL, INDICE			// apuntar segun el registro indice
-	ADC ZH, R1				// R1 debe ser 0 (registro 0)
-	LPM R16, Z				// Guardar lo apuntado en z
-
-	OUT PORTD, R16
-	CBI PORTC, PORTC5
-	
-	LDI ZH, HIGH(disp7seg<<1)
-	LDI ZL, LOW(disp7seg<<1)
-
-	//Desplazar Z a poscicion
-	
-	ADD	ZL, INDICE			// apuntar segun el registro indice
-	ADC ZH, R1				// R1 debe ser 0 (registro 0)
-	LPM R16, Z				// Guardar lo apuntado en z
-
-	OUT PORTD, R16
-	CBI PORTC, PORTC5
-	JMP EXIT
-
-	MODE_S1:
-
-	JMP EXIT
-
-
-	MODE_S2:
-
-	RJMP EXIT
-
-
-	MODE_S3:
-	
-	RJMP EXIT
-
-	MODE_S4:
-
-	RJMP EXIT
-
-	MODE_S5:
-
-	RJMP EXIT
-
-	MODE_S6:
-
-	RJMP EXIT
-
-
-
-
-
-	
-	EXIT:
 	RJMP MAIN_LOOP
 
 // NOINTERRUPTER ROUTINES
@@ -353,7 +267,10 @@ MAIN_LOOP:
 // Interrupcion por PINC
 ISR_PCINT1:
     // Guardar contexto
-
+	PUSH R16
+	PUSH R17
+	IN R16, SREG
+	PUSH R16
 	// INTERRUPCION
 	SBIS PINC, PINC1	
 	RJMP PRESSMODO
@@ -391,6 +308,10 @@ PRESSMAS:
 SALIR_ISR_PINC:
 	// Retornar Contexto
 
+	POP R16
+	OUT SREG, R16
+	POP R17
+	POP R16
 	// Salir de Interrupcion
     RETI
 
@@ -400,63 +321,145 @@ SALIR_ISR_PINC:
 
 TMIER1_COMPA:
     // Guardar contexto
-    
+	PUSH R16
+	PUSH R17
+	IN R16, SREG
+	PUSH R16
 
 	// Operaciones
 
 	SBI PIND, PIND7
 	 
-	INC SEGUNDOS_U
-	CPI SEGUNDOS_U, 10
-	BREQ INC_SEGUNDOS_D
-	RJMP SALIR_ISR_TMR0
-
-	INC_SEGUNDOS_D:
-	CLR SEGUNDOS_U
-	INC SEGUNDOS_D
-	CPI SEGUNDOS_D, 6
-	BREQ INC_VAR_HORAS_U
+	INC SEGUNDOS
+	CPI SEGUNDOS, 60
+	BREQ INC_VAR_MINUTOS_U
 	RJMP SALIR_ISR_TMR0
 	
-	INC_VAR_HORAS_U:
-	CLR SEGUNDOS_D
-	LDS R16, VAR_HORAS_U
+	INC_VAR_MINUTOS_U:
+	CLR SEGUNDOS
+	LDS R16, VAR_MINUTOS_U
 	INC R16 
 	CPI R16, 10             
-    BREQ INC_VAR_HORAS_D            
-    STS VAR_HORAS_U, R16      
+    BREQ INC_VAR_MINUTOS_D            
+    STS VAR_MINUTOS_U, R16      
     RJMP SALIR_ISR_TMR0
+
+	INC_VAR_MINUTOS_D:
+	CLR R16
+	STS VAR_MINUTOS_U, R16
+    LDS R16, VAR_MINUTOS_D      
+    INC R16
+    CPI R16, 6					
+    BREQ INC_VAR_HORAS_U
+    STS VAR_MINUTOS_D, R16      
+    RJMP SALIR_ISR_TMR0
+
+	INC_VAR_HORAS_U:
+	CLR R16
+	STS VAR_MINUTOS_D, R16
+    LDS R16, VAR_HORAS_U 
+	LDS R17, VAR_HORAS_D 
+	SWAP R17
+	INC R16
+	OR R17, R16
+	CPI R17, 0x24			
+    BREQ INC_VAR_DIAS_U
+	CPI R16, 10
+	BREQ INC_VAR_HORAS_D
+    STS VAR_HORAS_U, R16
+	CLR R17 
+	CLR R16     
+    RJMP SALIR_ISR_TMR0
+
 
 	INC_VAR_HORAS_D:
 	CLR R16
 	STS VAR_HORAS_U, R16
-    LDS R16, VAR_HORAS_D      
-    INC R16
-    CPI R16, 6					
-    BREQ INC_VAR_DIAS_U
-    STS VAR_HORAS_D, R16      
-    RJMP SALIR_ISR_TMR0
+    LDS R16, VAR_HORAS_D 
+	INC R16
+	STS VAR_HORAS_D, R16
+	CLR R16     
+	RJMP SALIR_ISR_TMR0
 
 	INC_VAR_DIAS_U:
 	CLR R16
+	STS VAR_HORAS_U, R16
 	STS VAR_HORAS_D, R16
-    LDS R16, VAR_DIAS_U  
-	INC R16
 
-    CPI R16, 6					
-    BREQ INC_VAR_DIAS_U
-    STS VAR_HORAS_D, R16      
+    LDS R16, VAR_DIAS_U 
+	LDS R17, VAR_DIAS_D 
+	SWAP R17
+	INC R16
+	OR R17, R16
+	CP R17, MES_ACTUAL			
+    BREQ INC_VAR_MES_U
+
+	CPI R16, 10
+	BREQ INC_VAR_DIAS_D
+
+    STS VAR_DIAS_U, R16
+	CLR R17      
     RJMP SALIR_ISR_TMR0
 
 
+	INC_VAR_DIAS_D:
+	CLR R16
+	STS VAR_DIAS_U, R16
+
+    LDS R16, VAR_DIAS_D 
+	INC R16
+	STS VAR_DIAS_D, R16
+
+	CLR R16     
+	RJMP SALIR_ISR_TMR0
 
 
+	INC_VAR_MES_U:
+	LDI R16, 1
+	STS VAR_DIAS_U, R16
+	CLR R16
+	STS VAR_DIAS_D, R16
+
+    LDS R16, VAR_MES_U 
+	LDS R17, VAR_MES_D 
+	SWAP R17
+	INC R16
+	OR R17, R16
+	CPI R17, 0x13			
+    BREQ RST_MES
+
+	CPI R16, 10
+	BREQ INC_VAR_MES_D
+
+    STS VAR_MES_U, R16
+	CLR R17      
+    RJMP SALIR_ISR_TMR0
 
 
+	INC_VAR_MES_D:
+	CLR R16
+	STS VAR_MES_U, R16
+
+    LDS R16, VAR_MES_D 
+	INC R16
+	STS VAR_MES_D, R16
+
+	CLR R16     
+	RJMP SALIR_ISR_TMR0
+
+	RST_MES:
+	CLR R16
+	STS VAR_MES_D, R16
+	LDI R16, 1
+	STS VAR_MES_U, R16
+	
 
 	SALIR_ISR_TMR0:
 	// Retornar Contexto
-
+	POP R16
+	OUT SREG, R16
+	POP R17
+	POP R16
 	// Salir de Interrupcion
     RETI
 
@@ -465,6 +468,12 @@ TMIER1_COMPA:
 
 TIMER0_OVF:
     // Guardar contexto
+	PUSH R16
+	PUSH R17
+	IN R16, SREG
+	PUSH R16
+
+	// Recargar Timer0
     LDI R16, 99
 	OUT TCNT0, R16
 	CLR R16
@@ -473,8 +482,18 @@ TIMER0_OVF:
 // Operacion
 	INC DPLY_ENCENDIDO
 	CPI DPLY_ENCENDIDO, 4
+	BRNE Apagar_Displays
+    CLR DPLY_ENCENDIDO
 
-	//BREQ REINICIAR_DISPLAY
+
+	Apagar_Displays:
+    IN R16, PORTB
+    ORI R16, 0x0F      
+    OUT PORTB, R16
+
+	IN R16, PORTD
+    ORI R16, 0x7F       
+    OUT PORTD, R16
 
 	CPI MODE, 0b000
 	BREQ MODO_horario
@@ -502,34 +521,82 @@ TIMER0_OVF:
 	MODO_horario:
 
 	CPI DPLY_ENCENDIDO, 0
-	BREQ MOSTRAR_MINUTOS_UNI
-	CPI DPLY_ENCENDIDO, 1
-	BREQ MOSTRAR_MINUTOS_DEC
-	CPI DPLY_ENCENDIDO, 2
-	BREQ MOSTRAR_HORAS_UNI
-	CPI DPLY_ENCENDIDO, 3
-	BREQ MOSTRAR_HORAS_UNI
-	
-
-	MOSTRAR_MINUTOS_UNI:
-
-	
-
-	MOSTRAR_MINUTOS_DEC:
-
-	MOSTRAR_HORAS_UNI:
-
-
+    BREQ Cargar_Min_U
+    CPI DPLY_ENCENDIDO, 1
+    BREQ Cargar_Min_D
+    CPI DPLY_ENCENDIDO, 2
+    BREQ Cargar_Hora_U
+    
+		Cargar_Hora_D:
+		LDS R16, VAR_HORAS_D
+		RJMP Dibujar_Numero
+		Cargar_Hora_U:
+	    LDS R16, VAR_HORAS_U 
+		RJMP Dibujar_Numero
+		Cargar_Min_D:
+	    LDS R16, VAR_MINUTOS_D 
+		RJMP Dibujar_Numero
+		Cargar_Min_U:
+	    LDS R16, VAR_MINUTOS_U 
+		RJMP Dibujar_Numero
+			
 
 	MODO_fecha:
+	; Elegir variable según el display
+    CPI DPLY_ENCENDIDO, 0
+    BREQ Cargar_Dia_U
+    CPI DPLY_ENCENDIDO, 1
+    BREQ Cargar_Dia_D
+    CPI DPLY_ENCENDIDO, 2
+    BREQ Cargar_Mes_U
+    
+	Cargar_Mes_D:
+	    LDS R16, VAR_MES_D 
+		RJMP Dibujar_Numero
+	Cargar_Mes_U:
+	    LDS R16, VAR_MES_U 
+		RJMP Dibujar_Numero
+	Cargar_Dia_D:
+	    LDS R16, VAR_DIAS_D 
+		RJMP Dibujar_Numero
+	Cargar_Dia_U:
+	    LDS R16, VAR_DIAS_U 
+		RJMP Dibujar_Numero
+	
+Dibujar_Numero:
+   
+    LDI ZH, HIGH(disp7seg<<1)
+    LDI ZL, LOW(disp7seg<<1)
+    ADD ZL, R16
+    ADC ZH, R1              ; R1 es 0
+    LPM R17, Z
+	IN R16, PORTD           ; Lee cómo está el puerto D actualmente (con el LED)
+    ANDI R16, 0x80          ; Conserva SOLO el bit 7 (PD7) y borra el resto
+    ANDI R17, 0x7F          ; Asegura que el número del display no toque el bit 7
+    OR R17, R16             ; Combina el LED encendido/apagado con el número
+    OUT PORTD, R17          ; Mandar a los segmentos
 
-	MODO_letras:
+MODO_letras:
 
-	REINICIAR_DISPLAY:
-	CLR DPLY_ENCENDIDO
+Activar_Transistor:
+    LDI ZH, HIGH(multDisp<<1)
+    LDI ZL, LOW(multDisp<<1)
+    ADD ZL, DPLY_ENCENDIDO
+    ADC ZH, R1
+    LPM R16, Z             
 
-	SALIR_ISR_TMR1:
-	// Retornar Contexto
+    IN R17, PORTB           
+    ORI R17, 0x0F           
+                                
+    AND R17, R16            
+    
+    OUT PORTB, R17          
 
+Salir_Timer0:
+   	// Retornar Contexto
+	POP R16
+	OUT SREG, R16
+	POP R17
+	POP R16
 	// Salir de Interrupcion
     RETI
