@@ -3,11 +3,11 @@
 *
 * Creado: 16/02/2026 - 12:00
 * Autor : Abner Quiej
-* Descripcion: Implementacion un contador de “decenas”. Cada vez que el contador con el TMR0 llegue a
-10 deberá de resetearlo e incrementar el contador de decenas en un segundo display de
+* Descripcion: Implementacion un contador de ?decenas?. Cada vez que el contador con el TMR0 llegue a
+10 deber? de resetearlo e incrementar el contador de decenas en un segundo display de
 7 segmentos, de manera que se muestren las decenas de segundos.
 Consideraciones
-- Cuando éste llegue a 60s deberá de reiniciar ambos contadores.
+- Cuando ?ste llegue a 60s deber? de reiniciar ambos contadores.
 - Los display de 7 segmentos deben estar conectados al mismo puerto
 
 */
@@ -20,7 +20,7 @@ Consideraciones
 .def SEGUNDOS			= R20        // Registro para el contador de 4 bits
 .def MODE				= R22
 .def INDICE				= R23
-.def MES_ACTUAL			= R24
+.def CONFIGURACION		= R24
 
 
 .def MOSTRAR_DIPLAY		= R3
@@ -42,13 +42,14 @@ Consideraciones
 	VAR_MINUTOS_D:		.byte 1  // Reserva 1 byte para Horas
 	VAR_HORAS_U:		.byte 1  // Reserva 1 byte para Unidades de Hora
 	VAR_HORAS_D:		.byte 1  // Reserva 1 byte para Horas
-    VAR_DIAS_U:		.byte 1  // Reserva 1 byte para Días
-    VAR_DIAS_D:		.byte 1  // Reserva 1 byte para Días
+    VAR_DIAS_U:		.byte 1  // Reserva 1 byte para D?as
+    VAR_DIAS_D:		.byte 1  // Reserva 1 byte para D?as
     VAR_MES_U:		.byte 1  // Reserva 1 byte para Mes
     VAR_MES_D:		.byte 1  // Reserva 1 byte para Mes
 	VAR_ALARMA_U:		.byte 1  // Reserva 1 byte para Mes
 	VAR_ALARMA_D:		.byte 1  // Reserva 1 byte para Mes
 	VAR_MES:			.byte 1	 // Reserva 1 byte para que numero de mes estamos
+	VAR_PINC_PREV:		.byte 1  // Estado anterior de PINC
 .cseg
 
 
@@ -93,10 +94,11 @@ STS VAR_HORAS_D, R16
 CLR SEGUNDOS
 LDI R16, 1
 STS VAR_MES_U, R16
-STS VAR_DIAS_U, R16    ; Unidad del día = 1
+STS VAR_DIAS_U, R16    ; Unidad del d?a = 1
 CLR R16
-STS VAR_DIAS_D, R16    ; Decena del día = 0
-STS VAR_MES_D, R16    ; Decena del día = 0
+STS VAR_DIAS_D, R16    ; Decena del d?a = 0
+STS VAR_MES_D, R16    ; Decena del d?a = 0
+
 ;========================================
 // Configurar entradas y salidas
 ;========================================
@@ -107,13 +109,13 @@ CBI DDRC, DDC1 // Poniendo en 0, el bit 1 de DDRC -> Input
 CBI DDRC, DDC2 // Poniendo en 0, el bit 1 de DDRC -> Input
 CBI DDRC, DDC3 // Poniendo en 0, el bit 1 de DDRC -> Input
 CBI DDRC, DDC4 // Poniendo en 0, el bit 1 de DDRC -> Input
-
+CBI DDRC, DDC5 // Poniendo en 0, el bit 1 de DDRC -> Input
 
 CBI PORTC, PORTC1 // Deshabilitando pull-up para PC1
 CBI PORTC, PORTC2 // Deshabilitando pull-up para PC2
 CBI PORTC, PORTC3 // Deshabilitando pull-up para PC3
 CBI PORTC, PORTC4 // Deshabilitando pull-up para PC4
-
+CBI PORTC, PORTC5 // Deshabilitando pull-up para PC4
 
 //CONFIGURAR PORTD COMO SALIDA
 
@@ -125,7 +127,7 @@ OUT PORTD, R16
 
 //SALIDAS  PC0, PB0,PB1, PB2, PB3, PB4, PB5
 
-SBI DDRC, DDC5 // Poniendo en 0, el bit 5 de DDRC -> Output
+SBI DDRC, DDC0 // Poniendo en 0, el bit 5 de DDRC -> Output
 SBI DDRB, DDB0 // Poniendo en 1, el bit 0 de DDRB -> Output
 SBI DDRB, DDB1 // Poniendo en 1, el bit 1 de DDRB -> Output
 SBI DDRB, DDB2 // Poniendo en 1, el bit 2 de DDRB -> Output
@@ -142,6 +144,10 @@ CBI PORTB, PORTB4   // Inicialmente apagado el PB4
 CBI PORTB, PORTB5   // Inicialmente apagado el PB5
 
 
+IN R16, PINC
+ANDI R16, 0b00011110   ; M?scara: PC1, PC2, PC3, PC4
+STS VAR_PINC_PREV, R16
+
 ;========================================
 ; Habilitar el grupo PCIE1 (Puerto C)
 ;========================================
@@ -149,14 +155,14 @@ CBI PORTB, PORTB5   // Inicialmente apagado el PB5
     LDI R17, (1 << PCIE1)
     STS PCICR, R17
 
-    // Habilitar específicamente los pines PCINT11 (PC3) y PCINT12 (PC4)
+    // Habilitar espec?ficamente los pines PCINT11 (PC3) y PCINT12 (PC4)
     LDI R17, (1 << PCINT8) | (1 << PCINT9) |(1 << PCINT10) 
     STS PCMSK1, R17
 
 
 
 ;========================================
-; CONFIGURACIÓN TIMER0
+; CONFIGURACI?N TIMER0
 ;========================================
 
     // Modo Normal (WGM01=0, WGM00=0)
@@ -171,14 +177,14 @@ CBI PORTB, PORTB5   // Inicialmente apagado el PB5
 	LDI R16, (1<<CS01)|(1<<CS00)
 	OUT TCCR0B, R16
 
-    ; Habilitar interrupción por overflow
+    ; Habilitar interrupci?n por overflow
     LDI R16, (1<<TOIE0)
     STS TIMSK0, R16
 
 
 
 ;========================================
-; CONFIGURACIÓN TIMER1
+; CONFIGURACI?N TIMER1
 ;========================================
 // TIMER1 CTC configurado a 1 segundo
 
@@ -196,7 +202,7 @@ STS OCR1AH, R16
 LDI R16, LOW(VELOCIDAD)
 STS OCR1AL, R16
 
-; Habilitar interrupción por comparación A
+; Habilitar interrupci?n por comparaci?n A
 LDI R16, (1<<OCIE1A)
 STS TIMSK1, R16
 
@@ -229,14 +235,12 @@ STS UCSR0B, R18
 	// Multiplexacion de 4 Displays Anodo Comun
 	multDisp: .DB 0b1110, 0b1101, 0b1011, 0b0111
 	
-	// Palabra "ON" en Display 7 segmentos Anodo Común
+	// Palabra "ON" en Display 7 segmentos Anodo Com?n
 	
-	dispON:	  .DB 0b00000001, 0b00010011
+	dispON_OFF: .DB 0b00000001, 0b00010011, 0b01110001, 0x00
 	
-	// Palabra "OF" en Display 7 segmentos Anodo Común
-	dispOFF:  .DB 0b00000001, 0b01110001
 
-	// Días máximos de cada mes (El primer 0 es relleno para el mes 0)
+	// D?as m?ximos de cada mes (El primer 0 es relleno para el mes 0)
 	tabla_meses: .DB 0x00, 0x32, 0x29, 0x32, 0x31, 0x32, 0x31, 0x32, 0x32, 0x31, 0x32, 0x31, 0x32, 0x00
 ;========================================
 // LIMPIAR REGISTROS
@@ -253,8 +257,432 @@ CLR MODE
 ;========================================
 
 MAIN_LOOP:
+	
+	CPI MODE, 0b000
+	BREQ MODO_HORA
+	
+	CPI MODE, 0b001
+	BREQ MODO_FECHA
+	
+	CPI MODE, 0b010
+	BREQ CONFIGURAR_HORA
+
+	CPI MODE, 0b011
+	BREQ CONFIGURAR_FECHA
+
+MODO_HORA:
+	CBI DDRB, DDB5
+	SBI DDRB, DDB4
+	RJMP MAIN_LOOP
+
+MODO_FECHA:
+	CBI DDRB, DDB4
+	SBI DDRB, DDB5
+	RJMP MAIN_LOOP
+
+
+
+CONFIGURAR_HORA:
+	; Deshabilitar interrupción por comparación A de Timer1
+	LDS R16, TIMSK1
+	ANDI R16, ~(1<<OCIE1A)
+	STS TIMSK1, R16
+	CLR SEGUNDOS
+
+	; Prescaler 256 ? más lento ? parpadeo visible
+	LDS R16, TCCR0B
+	ANDI R16, 0xF8          ; limpiar bits CS02, CS01, CS00
+	ORI R16, (1<<CS02)      ; prescaler 256
+	STS TCCR0B, R16
+	
+	SELECCION_DISP_CONFIGURAR:
+	SBI PINB, PINB4
+
+	CPI CONFIGURACION, 0
+	BREQ CONFIGURAR_VAR_MINUTOS_U
+
+	CPI CONFIGURACION, 1
+	BREQ CONFIGURAR_VAR_MINUTOS_D	
+
+	CPI CONFIGURACION, 2
+	BREQ CONFIGURAR_VAR_HORAS_U
+
+	RJMP CONFIGURAR_VAR_HORAS_D
+
+	CONFIGURAR_VAR_MINUTOS_U:
+		// ENCENDER EL DISPLAY A CONFIGURAR
+		CBI PORTB, PORTB0
+		
+		CPI BANDERA, 2
+		BREQ INC_VAR_MINUTOS_UNI
+
+		CPI BANDERA, 1
+		BREQ DEC_VAR_MINUTOS_UNI
+
+		RJMP SALIR_CONFIGURAR_HORA
+
+			INC_VAR_MINUTOS_UNI:
+				CLR BANDERA
+
+				LDS R16, VAR_MINUTOS_U
+				INC R16 
+				LDI R17, 10             
+				CPSE R16, R17            
+				CLR R16
+				STS VAR_MINUTOS_U, R16  
+
+			RJMP SALIR_CONFIGURAR_HORA
+
+			DEC_VAR_MINUTOS_UNI:
+				CLR BANDERA
+
+				LDS R16, VAR_MINUTOS_U
+				DEC R16 
+				CPI R16, 0             
+				BRNE SALIR_DEC_VAR_MINUTOS_UNI    
+				LDI R16, 9
+
+				SALIR_DEC_VAR_MINUTOS_UNI:
+				STS VAR_MINUTOS_U, R16  
+
+			RJMP SALIR_CONFIGURAR_HORA
+
+
+	CONFIGURAR_VAR_MINUTOS_D:
+	
+			CBI PORTB, PORTB1
+	
+			CPI BANDERA, 2
+			BREQ INC_VAR_MINUTOS_DEC
+			CPI BANDERA, 1
+			BREQ DEC_VAR_MINUTOS_DEC
+			RJMP SALIR_CONFIGURAR_HORA
+	
+				INC_VAR_MINUTOS_DEC:
+					CLR BANDERA
+
+					LDS R16, VAR_MINUTOS_D
+					INC R16 
+					LDI R17, 10             
+					CPSE R16, R17            
+					CLR R16
+					STS VAR_MINUTOS_D, R16 
+				 
+				RJMP SALIR_CONFIGURAR_HORA
+	
+
+				DEC_VAR_MINUTOS_DEC:
+					CLR BANDERA
+
+					LDS R16, VAR_MINUTOS_D
+					DEC R16 
+					CPI R16, 0             
+					BRNE SALIR_DEC_VAR_MINUTOS_DEC   
+					LDI R16, 9
+					
+					SALIR_DEC_VAR_MINUTOS_DEC:
+						STS VAR_MINUTOS_D, R16  
+	
+				RJMP SALIR_CONFIGURAR_HORA
+	
+	
+
+	CONFIGURAR_VAR_HORAS_U:
+		// ENCENDER EL DISPLAY A CONFIGURAR
+		CBI PORTB, PORTB2
+		
+		CPI BANDERA, 2
+		BREQ INC_VAR_HORAS_UNI
+
+		CPI BANDERA, 1
+		BREQ DEC_VAR_HORAS_UNI
+
+		RJMP SALIR_CONFIGURAR_HORA
+
+			INC_VAR_HORAS_UNI:
+				CLR BANDERA
+
+				LDS R16, VAR_HORAS_U
+				INC R16 
+				LDI R17, 10             
+				CPSE R16, R17            
+				CLR R16
+				STS VAR_HORAS_U, R16  
+
+			RJMP SALIR_CONFIGURAR_HORA
+
+			DEC_VAR_HORAS_UNI:
+				CLR BANDERA
+
+				LDS R16, VAR_HORAS_U
+				DEC R16 
+				CPI R16, 0             
+				BRNE SALIR_DEC_VAR_HORAS_UNI  
+				LDI R16, 9
+
+				SALIR_DEC_VAR_HORAS_UNI:
+				STS VAR_MINUTOS_U, R16  
+
+			RJMP SALIR_CONFIGURAR_HORA
+
+
+	CONFIGURAR_VAR_HORAS_D:
+	
+			CBI PORTB, PORTB3
+	
+			CPI BANDERA, 2
+			BREQ INC_VAR_HORAS_DEC
+			CPI BANDERA, 1
+			BREQ DEC_VAR_HORAS_DEC
+			RJMP SALIR_CONFIGURAR_HORA
+	
+				INC_VAR_HORAS_DEC:
+					CLR BANDERA
+
+					LDS R16, VAR_HORAS_D
+					INC R16 
+					LDI R17, 10             
+					CPSE R16, R17            
+					CLR R16
+					STS VAR_HORAS_D, R16 
+				 
+				RJMP SALIR_CONFIGURAR_HORA
+	
+
+				DEC_VAR_HORAS_DEC:
+					CLR BANDERA
+
+					LDS R16, VAR_HORAS_D
+					DEC R16 
+					CPI R16, 0             
+					BRNE SALIR_DEC_VAR_HORAS_DEC   
+					LDI R16, 9
+					
+					SALIR_DEC_VAR_HORAS_DEC:
+						STS VAR_HORAS_D, R16  
+	
+				RJMP SALIR_CONFIGURAR_HORA
+
+
+	SALIR_CONFIGURAR_HORA:
+
+	CPI MODE, 0b010
+	BRNE SALIR_MODE_S2
+	JMP SELECCION_DISP_CONFIGURAR
+
+	SALIR_MODE_S2:	
+	; Habilitar interrupción por comparación A de Timer1
+	LDS R16, TIMSK1
+	ORI R16, (1<<OCIE1A)
+	STS TIMSK1, R16
+
+	; Prescaler 64 ? velocidad normal (tu configuración original)
+	LDS R16, TCCR0B
+	ANDI R16, 0xF8
+	ORI R16, (1<<CS01)|(1<<CS00)    ; prescaler 64
+	STS TCCR0B, R16
 
 	RJMP MAIN_LOOP
+
+CONFIGURAR_FECHA:
+
+
+; Prescaler 256 ? más lento ? parpadeo visible
+	LDS R16, TCCR0B
+	ANDI R16, 0xF8          ; limpiar bits CS02, CS01, CS00
+	ORI R16, (1<<CS02)      ; prescaler 256
+	STS TCCR0B, R16
+	
+	SELECCION_DISP_CONFIGURAR:
+	SBI PINB, PINB5
+
+	CPI CONFIGURACION, 0
+	BREQ CONFIGURAR_VAR_DIAS_U
+
+	CPI CONFIGURACION, 1
+	BREQ CONFIGURAR_VAR_DIAS_D	
+
+	CPI CONFIGURACION, 2
+	BREQ CONFIGURAR_VAR_MES_U
+
+	RJMP CONFIGURAR_VAR_MES_D
+
+	CONFIGURAR_VAR_MES_U:
+		// ENCENDER EL DISPLAY A CONFIGURAR
+		CBI PORTB, PORTB0
+		
+		CPI BANDERA, 2
+		BREQ INC_VAR_MES_UNI
+
+		CPI BANDERA, 1
+		BREQ DEC_VAR_MES_UNI
+
+		RJMP SALIR_CONFIGURAR_FECHA
+
+			INC_VAR_MES_UNI:
+				CLR BANDERA
+
+				LDS R16, VAR_MES_U
+				INC R16 
+				LDI R17, 10             
+				CPSE R16, R17            
+				CLR R16
+				STS VAR_MES_U, R16  
+
+			RJMP SALIR_CONFIGURAR_HORA
+
+			DEC_VAR_MINUTOS_UNI:
+				CLR BANDERA
+
+				LDS R16, VAR_MINUTOS_U
+				DEC R16 
+				CPI R16, 0             
+				BRNE SALIR_DEC_VAR_MINUTOS_UNI    
+				LDI R16, 9
+
+				SALIR_DEC_VAR_MINUTOS_UNI:
+				STS VAR_MINUTOS_U, R16  
+
+			RJMP SALIR_CONFIGURAR_HORA
+
+
+	CONFIGURAR_VAR_MINUTOS_D:
+	
+			CBI PORTB, PORTB1
+	
+			CPI BANDERA, 2
+			BREQ INC_VAR_MINUTOS_DEC
+			CPI BANDERA, 1
+			BREQ DEC_VAR_MINUTOS_DEC
+			RJMP SALIR_CONFIGURAR_HORA
+	
+				INC_VAR_MINUTOS_DEC:
+					CLR BANDERA
+
+					LDS R16, VAR_MINUTOS_D
+					INC R16 
+					LDI R17, 10             
+					CPSE R16, R17            
+					CLR R16
+					STS VAR_MINUTOS_D, R16 
+				 
+				RJMP SALIR_CONFIGURAR_HORA
+	
+
+				DEC_VAR_MINUTOS_DEC:
+					CLR BANDERA
+
+					LDS R16, VAR_MINUTOS_D
+					DEC R16 
+					CPI R16, 0             
+					BRNE SALIR_DEC_VAR_MINUTOS_DEC   
+					LDI R16, 9
+					
+					SALIR_DEC_VAR_MINUTOS_DEC:
+						STS VAR_MINUTOS_D, R16  
+	
+				RJMP SALIR_CONFIGURAR_HORA
+	
+	
+
+	CONFIGURAR_VAR_HORAS_U:
+		// ENCENDER EL DISPLAY A CONFIGURAR
+		CBI PORTB, PORTB2
+		
+		CPI BANDERA, 2
+		BREQ INC_VAR_HORAS_UNI
+
+		CPI BANDERA, 1
+		BREQ DEC_VAR_HORAS_UNI
+
+		RJMP SALIR_CONFIGURAR_HORA
+
+			INC_VAR_HORAS_UNI:
+				CLR BANDERA
+
+				LDS R16, VAR_HORAS_U
+				INC R16 
+				LDI R17, 10             
+				CPSE R16, R17            
+				CLR R16
+				STS VAR_HORAS_U, R16  
+
+			RJMP SALIR_CONFIGURAR_HORA
+
+			DEC_VAR_HORAS_UNI:
+				CLR BANDERA
+
+				LDS R16, VAR_HORAS_U
+				DEC R16 
+				CPI R16, 0             
+				BRNE SALIR_DEC_VAR_HORAS_UNI  
+				LDI R16, 9
+
+				SALIR_DEC_VAR_HORAS_UNI:
+				STS VAR_MINUTOS_U, R16  
+
+			RJMP SALIR_CONFIGURAR_HORA
+
+
+	CONFIGURAR_VAR_HORAS_D:
+	
+			CBI PORTB, PORTB3
+	
+			CPI BANDERA, 2
+			BREQ INC_VAR_HORAS_DEC
+			CPI BANDERA, 1
+			BREQ DEC_VAR_HORAS_DEC
+			RJMP SALIR_CONFIGURAR_HORA
+	
+				INC_VAR_HORAS_DEC:
+					CLR BANDERA
+
+					LDS R16, VAR_HORAS_D
+					INC R16 
+					LDI R17, 10             
+					CPSE R16, R17            
+					CLR R16
+					STS VAR_HORAS_D, R16 
+				 
+				RJMP SALIR_CONFIGURAR_HORA
+	
+
+				DEC_VAR_HORAS_DEC:
+					CLR BANDERA
+
+					LDS R16, VAR_HORAS_D
+					DEC R16 
+					CPI R16, 0             
+					BRNE SALIR_DEC_VAR_HORAS_DEC   
+					LDI R16, 9
+					
+					SALIR_DEC_VAR_HORAS_DEC:
+						STS VAR_HORAS_D, R16  
+	
+				RJMP SALIR_CONFIGURAR_HORA
+
+
+	SALIR_CONFIGURAR_HORA:
+
+	CPI MODE, 0b010
+	BRNE SALIR_MODE_S2
+	JMP SELECCION_DISP_CONFIGURAR
+
+	SALIR_MODE_S2:	
+	; Habilitar interrupción por comparación A de Timer1
+	LDS R16, TIMSK1
+	ORI R16, (1<<OCIE1A)
+	STS TIMSK1, R16
+
+	; Prescaler 64 ? velocidad normal (tu configuración original)
+	LDS R16, TCCR0B
+	ANDI R16, 0xF8
+	ORI R16, (1<<CS01)|(1<<CS00)    ; prescaler 64
+	STS TCCR0B, R16
+
+	RJMP MAIN_LOOP
+	
+
 
 // NOINTERRUPTER ROUTINES
 
@@ -271,16 +699,50 @@ ISR_PCINT1:
 	PUSH R17
 	IN R16, SREG
 	PUSH R16
+	
 	// INTERRUPCION
-	SBIS PINC, PINC1	
+
+	//Leer estado actual de PINC (solo pines de inter?s)
+    IN R16, PINC
+    ANDI R16, 0b00011110        ; M?scara PC1, PC2, PC3, PC4
+
+    // Cargar estado anterior
+    LDS R17, VAR_PINC_PREV
+
+    // Detectar flancos de subida: bits que eran 0 y ahora son 1
+    // flanco_subida = (~prev) & actual
+    COM R17                     ; NOT del estado anterior
+    AND R17, R16                ; AND con estado actual ? solo flancos de subida
+
+    ; Guardar nuevo estado como "anterior" para la pr?xima vez
+    IN R16, PINC
+    ANDI R16, 0b00011110
+    STS VAR_PINC_PREV, R16
+	
+	; Verificar qu? pin tuvo flanco de subida
+	SBRC R17, PC0
+	RJMP PRESSCONFIGURACION
+	
+	SBRC R17, PC1
 	RJMP PRESSMODO
-	SBIS PINC, PINC2
+	
+	SBRC R17, PC2
 	RJMP PRESSALARMA
-	SBIS PINC, PINC3
+	
+	SBRC R17, PC3
 	RJMP PRESSMENOS
-	SBIS PINC, PINC4
+	
+	SBRC R17, PC4
 	RJMP PRESSMAS
+	
 	RJMP SALIR_ISR_PINC
+
+
+PRESSCONFIGURACION:
+	INC CONFIGURACION
+	CPI CONFIGURACION, 3
+	BRNE SALIR_ISR_PINC
+	CLR CONFIGURACION
 
 PRESSMODO:
 	INC MODE
@@ -391,7 +853,8 @@ TMIER1_COMPA:
 	SWAP R17
 	INC R16
 	OR R17, R16
-	CP R17, MES_ACTUAL			
+	LDS R16, VAR_MES
+	CP R17, R16			
     BREQ INC_VAR_MES_U
 
 	CPI R16, 10
@@ -503,7 +966,7 @@ blank_loop:
     BRNE blank_loop
     POP R17
 
-	  ; --- elegir datos según modo ---
+	  ; --- elegir datos seg?n modo ---
 
 	CPI MODE, 0b000
 	BREQ MODO_horario
@@ -552,7 +1015,7 @@ blank_loop:
 			
 
 	MODO_fecha:
-	; Elegir variable según el display
+	; Elegir variable seg?n el display
     CPI DPLY_ENCENDIDO, 0
     BREQ Cargar_Dia_U
     CPI DPLY_ENCENDIDO, 1
@@ -572,7 +1035,55 @@ blank_loop:
 	Cargar_Dia_U:
 	    LDS R16, VAR_DIAS_U 
 		RJMP Dibujar_Numero
+
+MODO_letras:
 	
+	CPI DPLY_ENCENDIDO, 0
+    BREQ Cargar_O
+    CPI DPLY_ENCENDIDO, 1
+    BREQ Cargar_N
+    CPI DPLY_ENCENDIDO, 2
+    BREQ Cargar_O
+	
+	Cargar_F:
+	LDI R16,2
+	LDI ZH, HIGH(dispON_OFF<<1)
+    LDI ZL, LOW(dispON_OFF<<1)
+    ADD ZL, R16
+    ADC ZH, R1              ; R1 es 0
+    LPM R17, Z
+	IN R16, PORTD          
+    ANDI R16, 0x80         
+    ANDI R17, 0x7F          
+    OR R17, R16             
+    OUT PORTD, R17
+	RJMP Activar_Transistor          
+
+	Cargar_O:
+	LDI ZH, HIGH(dispON_OFF<<1)
+    LDI ZL, LOW(dispON_OFF<<1)
+    LPM R17, Z
+	IN R16, PORTD          
+    ANDI R16, 0x80         
+    ANDI R17, 0x7F          
+    OR R17, R16             
+    OUT PORTD, R17 
+	RJMP Activar_Transistor
+
+	Cargar_N:
+	LDI R16,1
+	LDI ZH, HIGH(dispON_OFF<<1)
+    LDI ZL, LOW(dispON_OFF<<1)
+    ADD ZL, R16
+    ADC ZH, R1              ; R1 es 0
+    LPM R17, Z
+	IN R16, PORTD          
+    ANDI R16, 0x80         
+    ANDI R17, 0x7F          
+    OR R17, R16             
+    OUT PORTD, R17
+	RJMP Activar_Transistor 
+
 Dibujar_Numero:
    
     LDI ZH, HIGH(disp7seg<<1)
@@ -580,13 +1091,13 @@ Dibujar_Numero:
     ADD ZL, R16
     ADC ZH, R1              ; R1 es 0
     LPM R17, Z
-	IN R16, PORTD           ; Lee cómo está el puerto D actualmente (con el LED)
+	IN R16, PORTD           ; Lee c?mo est? el puerto D actualmente (con el LED)
     ANDI R16, 0x80          ; Conserva SOLO el bit 7 (PD7) y borra el resto
-    ANDI R17, 0x7F          ; Asegura que el número del display no toque el bit 7
-    OR R17, R16             ; Combina el LED encendido/apagado con el número
+    ANDI R17, 0x7F          ; Asegura que el n?mero del display no toque el bit 7
+    OR R17, R16             ; Combina el LED encendido/apagado con el n?mero
     OUT PORTD, R17          ; Mandar a los segmentos
 
-MODO_letras:
+
 
 Activar_Transistor:
     LDI ZH, HIGH(multDisp<<1)
