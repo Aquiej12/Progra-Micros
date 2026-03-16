@@ -1,14 +1,9 @@
 /*
-* laboratorio3-Interrupciones
+* PROYECTO 1 - RELOJ
 *
-* Creado: 16/02/2026 - 12:00
+* Creado: 16/03/2026 - 12:00
 * Autor : Abner Quiej
-* Descripcion: Implementacion un contador de ?decenas?. Cada vez que el contador con el TMR0 llegue a
-10 deber? de resetearlo e incrementar el contador de decenas en un segundo display de
-7 segmentos, de manera que se muestren las decenas de segundos.
-Consideraciones
-- Cuando ?ste llegue a 60s deber? de reiniciar ambos contadores.
-- Los display de 7 segmentos deben estar conectados al mismo puerto
+* Descripcion: 
 
 */
 /****************************************/
@@ -28,9 +23,9 @@ Consideraciones
 
 
 // definir modo de trabajo del reloj
-.equ VELOCIDAD = 200
+.equ VELOCIDAD = 15625
 ; 15625  = EXACTO
-; 1953 = RAPIDO
+; 200 = RAPIDO
 
 // Numero Maximo de Modos
 .equ MAX_MODES = 7
@@ -53,8 +48,9 @@ Consideraciones
 	VAR_MES:			.byte 1	 // Reserva 1 byte para que numero de mes estamos
 	VAR_PINC_PREV:		.byte 1  // Estado anterior de PINC
 	VAR_ALARMA_ESTADO:			.byte 1  // Reserva 1 byte para guardar estado de alarma
+	VAR_BLINK_CONT:			.byte 1  ; Contador para la velocidad del parpadeo
+	VAR_BLINK_ESTADO:	.byte 1  ; Estado actual del parpadeo (0=Apagado, 1=Encendido)
 .cseg
-
 
 ;========================================
 // VECTORES
@@ -266,11 +262,47 @@ CLR MODE
 ;========================================
 // LOOP INFINITO
 ;========================================
-
 MAIN_LOOP:
 
 	RCALL ACTUALIZAR_MES
-	
+LDS R16, VAR_ALARMA_ESTADO
+	CPI R16, 1
+	BRNE CONTINUAR_MODOS       ; Si está apagada, saltar comprobación
+
+	; Si ya estamos en el modo 6 (sonando), no verificar de nuevo
+	CPI MODE, 6
+	BREQ CONTINUAR_MODOS
+
+	; Comparar Horas D
+	LDS R16, VAR_HORAS_D
+	LDS R17, VAR_ALARMA_HORAS_D
+	CP R16, R17
+	BRNE CONTINUAR_MODOS
+
+	; Comparar Horas U
+	LDS R16, VAR_HORAS_U
+	LDS R17, VAR_ALARMA_HORAS_U
+	CP R16, R17
+	BRNE CONTINUAR_MODOS
+
+	; Comparar Minutos D
+	LDS R16, VAR_MINUTOS_D
+	LDS R17, VAR_ALARMA_MINUTOS_D
+	CP R16, R17
+	BRNE CONTINUAR_MODOS
+
+	; Comparar Minutos U
+	LDS R16, VAR_MINUTOS_U
+	LDS R17, VAR_ALARMA_MINUTOS_U
+	CP R16, R17
+	BRNE CONTINUAR_MODOS
+
+	; ¡COINCIDE LA HORA! Entrar a Modo 6 automáticamente
+	LDI R16, 6
+	MOV MODE, R16
+
+
+CONTINUAR_MODOS:
 	CPI MODE, 0b000
 	BREQ MODO_HORA
 	
@@ -285,12 +317,21 @@ MAIN_LOOP:
 	
 	CPI MODE, 0b100
 	BREQ CONFIGURAR_ALARMA1
+
+	CPI MODE, 0b110
+	BREQ MODO_ALARMA_SONANDO
+	
 	RJMP MAIN_LOOP
 	
 	CONFIGURAR_FECHA1:
 		JMP CONFIGURAR_FECHA
 	CONFIGURAR_ALARMA1:
 		JMP CONFIGURAR_ALARMA
+
+MODO_ALARMA_SONANDO:
+	; Aquí se queda atrapado mostrando la alarma.
+	; Los displays se encargan en el TMR0 (ya lo tienes configurado)
+	RJMP MAIN_LOOP
 MODO_HORA:
     CBI PORTB, PORTB5    ; apaga LED fecha
     SBI PORTB, PORTB4    ; enciende LED hora
@@ -311,11 +352,6 @@ CONFIGURAR_HORA:
 	STS TIMSK1, R16
 	CLR SEGUNDOS
 
-	; Prescaler 256 ? m�s lento ? parpadeo visible
-	LDS R16, TCCR0B
-	ANDI R16, 0xF8          ; limpiar bits CS02, CS01, CS00
-	ORI R16, (1<<CS02)      ; prescaler 256
-	STS TCCR0B, R16
 	
 	SELECCION_DISP_CONFIGURAR:
 
@@ -516,11 +552,6 @@ CONFIGURAR_HORA:
 	ORI R16, (1<<OCIE1A)
 	STS TIMSK1, R16
 
-	; Prescaler 64 ? velocidad normal (tu configuraci�n original)
-	LDS R16, TCCR0B
-	ANDI R16, 0xF8
-	ORI R16, (1<<CS01)|(1<<CS00)    ; prescaler 64
-	STS TCCR0B, R16
 
 	RJMP MAIN_LOOP
 
@@ -532,10 +563,7 @@ CONFIGURAR_FECHA:
     SBI PORTB, PORTB5
 
 	RCALL VALIDAR_DIA_MES 
-    LDS R16, TCCR0B
-    ANDI R16, 0xF8
-    ORI R16, (1<<CS02)
-    STS TCCR0B, R16
+
 
     SELECCION_DISP_CONFIGURAR_FECHA:
 		RCALL VALIDAR_DIA_MES
@@ -885,10 +913,7 @@ DEC_VAR_DIA_UNI:
         JMP SELECCION_DISP_CONFIGURAR_FECHA
 
         SALIR_MODE_S3:
-        LDS R16, TCCR0B
-        ANDI R16, 0xF8
-        ORI R16, (1<<CS01)|(1<<CS00)
-        STS TCCR0B, R16
+  
 
         JMP MAIN_LOOP
 
@@ -897,11 +922,7 @@ CONFIGURAR_ALARMA:
 	    CBI PORTB, PORTB5    ; apaga LED fecha
 		SBI PORTB, PORTB4    ; enciende LED hora
 
-	; Prescaler 256 ? m�s lento ? parpadeo visible
-	LDS R16, TCCR0B
-	ANDI R16, 0xF8          ; limpiar bits CS02, CS01, CS00
-	ORI R16, (1<<CS02)      ; prescaler 256
-	STS TCCR0B, R16
+
 	
 	SELECCION_DISP_CONFIGURAR_ALARMA:
 	CPI CONFIGURACION, 0
@@ -1097,11 +1118,6 @@ CONFIGURAR_ALARMA:
 
 	SALIR_MODE_S4:
 
-	; Prescaler 64 ? velocidad normal (tu configuraci�n original)
-	LDS R16, TCCR0B
-	ANDI R16, 0xF8
-	ORI R16, (1<<CS01)|(1<<CS00)    ; prescaler 64
-	STS TCCR0B, R16
 	RJMP MAIN_LOOP
 
 
@@ -1200,9 +1216,13 @@ _dbnc_inner:
     AND R17, R16                ; AND con estado actual ? solo flancos de subida
 
     ; Guardar nuevo estado como "anterior" para la pr?xima vez
-    IN R16, PINC
-    ANDI R16, 0b00011111 
-    STS VAR_PINC_PREV, R16
+	IN R16, PINC
+	ANDI R16, 0b00011111 
+	STS VAR_PINC_PREV, R16
+	
+	; --- BLOQUEO: SI LA ALARMA ESTÁ SONANDO ---
+	CPI MODE, 6
+	BREQ EVALUAR_APAGAR_ALARMA
 	
 	; Verificar qu? pin tuvo flanco de subida
     SBRC R17, PC1
@@ -1222,6 +1242,17 @@ _dbnc_inner:
 		
 	RJMP SALIR_ISR_PINC
 
+EVALUAR_APAGAR_ALARMA:
+	SBRC R17, PC2       ; O si presiona PC2 (ALARMA)
+	RJMP APAGAR_ALARMA
+	RJMP SALIR_ISR_PINC ; Ignorar cualquier otro botón
+
+	APAGAR_ALARMA:
+	CBI PORTC, PORTC5           ; Apagar zumbador
+	LDI R16, 0
+	STS VAR_ALARMA_ESTADO, R16  ; Apagar la bandera (así no vuelve a sonar este mismo minuto)
+	CLR MODE                    ; Regresar al reloj normal (Modo 0)
+	RJMP SALIR_ISR_PINC
 
 	PRESSCONFIGURACION:
 	CPI MODE, 0b101
@@ -1242,7 +1273,7 @@ _dbnc_inner:
 
 	PRESSMODO:
 		INC MODE
-		CPI MODE, MAX_MODES
+		CPI MODE, 6
 		BRNE CONTINUE
 		CLR MODE
 		CONTINUE:
@@ -1443,7 +1474,30 @@ TIMER0_OVF:
     LDI R16, 99
 	OUT TCNT0, R16
 	CLR R16
+	; --- NUEVO: CRONÓMETRO DE PARPADEO ---
+	LDS R16, VAR_BLINK_CONT
+	INC R16
+	CPI R16, 150              ; 150 es la velocidad del parpadeo (ajusta a tu gusto)
+	BRNE SALVAR_CONTADOR_BLINK
+	CLR R16                   ; Reiniciar contador
+	LDS R17, VAR_BLINK_ESTADO
+	LDI R18, 1
+	EOR R17, R18              ; Invertir el estado (1 a 0, 0 a 1)
+	STS VAR_BLINK_ESTADO, R17
+SALVAR_CONTADOR_BLINK:
+	STS VAR_BLINK_CONT, R16
+	; -------------------------------------
 
+	; --- BLOQUE BUZZER PASIVO ---
+	CPI MODE, 6
+	BRNE SILENCIAR_BUZZER
+	SBI PINC, PINC5       ; ¡MAGIA AVR! Escribir 1 a PINC invierte el estado de PORTC5
+	RJMP CONTINUAR_OVF0
+
+	SILENCIAR_BUZZER:
+	CBI PORTC, PORTC5     ; Asegurarnos de que esté apagado si no es alarma
+
+	CONTINUAR_OVF0:
 
 	// Operacion
 	INC DPLY_ENCENDIDO
@@ -1620,7 +1674,24 @@ TIMER0_OVF:
 
 
 
-	Activar_Transistor:
+Activar_Transistor:
+		; --- LÓGICA DE INTERCEPTACIÓN PARA PARPADEO ---
+		CPI MODE, 2
+		BREQ EVALUAR_PARPADEO
+		CPI MODE, 3
+		BREQ EVALUAR_PARPADEO
+		CPI MODE, 4
+		BREQ EVALUAR_PARPADEO
+		RJMP ENCENDER_NORMAL
+
+	EVALUAR_PARPADEO:
+		CP DPLY_ENCENDIDO, CONFIGURACION
+		BRNE ENCENDER_NORMAL        ; Si NO es el dígito seleccionado, se enciende normal
+		LDS R16, VAR_BLINK_ESTADO
+		CPI R16, 0
+		BREQ Salir_Timer0           ; Si es el seleccionado y está en fase OFF, salir dejando apagado!
+
+	ENCENDER_NORMAL:
 		LDI ZH, HIGH(multDisp<<1)
 		LDI ZL, LOW(multDisp<<1)
 		ADD ZL, DPLY_ENCENDIDO
@@ -1631,6 +1702,8 @@ TIMER0_OVF:
 		ANDI R17, 0xF0         ; Limpia bits 0-3, conserva 4-7
 		OR R17, R16            ; Combina solo los bits bajos
 		OUT PORTB, R17         
+
+	     
 
 	Salir_Timer0:
 		// Retornar Contexto
