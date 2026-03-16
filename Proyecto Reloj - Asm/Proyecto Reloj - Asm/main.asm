@@ -698,7 +698,6 @@ CONFIGURAR_FECHA:
 			STS_DEC_VAR_MES_UNI:
 				STS VAR_MES_UNI, R16
 		RJMP SALIR_CONFIGURAR_FECHA
-// --------------------------------
 
 	CONFIGURAR_VAR_DIA_D:
 		
@@ -839,44 +838,44 @@ ISR_PCINT1:
 	RJMP SALIR_ISR_PINC
 
 
-PRESSCONFIGURACION:
-	INC CONFIGURACION
-	CPI CONFIGURACION, 3
-	BRNE SALIR_ISR_PINC
-	CLR CONFIGURACION
+	PRESSCONFIGURACION:
+		INC CONFIGURACION
+		CPI CONFIGURACION, 3
+		BRNE SALIR_ISR_PINC
+		CLR CONFIGURACION
 
-PRESSMODO:
-	INC MODE
-	CPI MODE, MAX_MODES
-	BRNE CONTINUE
-	CLR MODE
-	CONTINUE:
-	RJMP SALIR_ISR_PINC
+	PRESSMODO:
+		INC MODE
+		CPI MODE, MAX_MODES
+		BRNE CONTINUE
+		CLR MODE
+		CONTINUE:
+			RJMP SALIR_ISR_PINC
 
-PRESSALARMA:
-	//CPI ALARMA, 0
-	//BREQ SALIR_ISR_PINC
-	//CBI PORTB, PB5
-	//RJMP SALIR_ISR_PINC
+	PRESSALARMA:
+		//CPI ALARMA, 0
+		//BREQ SALIR_ISR_PINC
+		//CBI PORTB, PB5
+		//RJMP SALIR_ISR_PINC
 
-PRESSMENOS:
-	LDI BANDERA, 1
-	RJMP SALIR_ISR_PINC
+	PRESSMENOS:
+		LDI BANDERA, 1
+		RJMP SALIR_ISR_PINC
 
-PRESSMAS:
-	LDI BANDERA, 2
-	RJMP SALIR_ISR_PINC
+	PRESSMAS:
+		LDI BANDERA, 2
+		RJMP SALIR_ISR_PINC
 
 
-SALIR_ISR_PINC:
-	// Retornar Contexto
+	SALIR_ISR_PINC:
+		// Retornar Contexto
 
-	POP R16
-	OUT SREG, R16
-	POP R17
-	POP R16
+		POP R16
+		OUT SREG, R16
+		POP R17
+		POP R16
 	// Salir de Interrupcion
-    RETI
+	RETI
 
 
 
@@ -899,123 +898,123 @@ TMIER1_COMPA:
 	RJMP SALIR_ISR_TMR0
 	
 	INC_VAR_MINUTOS_U:
-	CLR SEGUNDOS
-	LDS R16, VAR_MINUTOS_U
-	INC R16 
-	CPI R16, 10             
-    BREQ INC_VAR_MINUTOS_D            
-    STS VAR_MINUTOS_U, R16      
-    RJMP SALIR_ISR_TMR0
+		CLR SEGUNDOS
+		LDS R16, VAR_MINUTOS_U
+		INC R16 
+		CPI R16, 10             
+    	BREQ INC_VAR_MINUTOS_D            
+    	STS VAR_MINUTOS_U, R16      
+    	RJMP SALIR_ISR_TMR0
 
 	INC_VAR_MINUTOS_D:
-	CLR R16
-	STS VAR_MINUTOS_U, R16
-    LDS R16, VAR_MINUTOS_D      
-    INC R16
-    CPI R16, 6					
-    BREQ INC_VAR_HORAS_U
-    STS VAR_MINUTOS_D, R16      
-    RJMP SALIR_ISR_TMR0
+		CLR R16
+		STS VAR_MINUTOS_U, R16
+    	LDS R16, VAR_MINUTOS_D      
+    	INC R16
+    	CPI R16, 6					
+    	BREQ INC_VAR_HORAS_U
+    	STS VAR_MINUTOS_D, R16      
+    	RJMP SALIR_ISR_TMR0
 
 	INC_VAR_HORAS_U:
-	CLR R16
-	STS VAR_MINUTOS_D, R16
-    LDS R16, VAR_HORAS_U 
-	LDS R17, VAR_HORAS_D 
-	SWAP R17
-	INC R16
-	OR R17, R16
-	CPI R17, 0x24			
-    BREQ INC_VAR_DIAS_U
-	CPI R16, 10
-	BREQ INC_VAR_HORAS_D
-    STS VAR_HORAS_U, R16
-	CLR R17 
-	CLR R16     
-    RJMP SALIR_ISR_TMR0
+		CLR R16
+		STS VAR_MINUTOS_D, R16
+		LDS R16, VAR_HORAS_U 
+		LDS R17, VAR_HORAS_D 
+		SWAP R17
+		INC R16
+		OR R17, R16
+		CPI R17, 0x24			
+		BREQ INC_VAR_DIAS_U
+		CPI R16, 10
+		BREQ INC_VAR_HORAS_D
+		STS VAR_HORAS_U, R16
+		CLR R17 
+		CLR R16     
+		RJMP SALIR_ISR_TMR0
 
 
 	INC_VAR_HORAS_D:
-	CLR R16
-	STS VAR_HORAS_U, R16
-    LDS R16, VAR_HORAS_D 
-	INC R16
-	STS VAR_HORAS_D, R16
-	CLR R16     
-	RJMP SALIR_ISR_TMR0
+		CLR R16
+		STS VAR_HORAS_U, R16
+		LDS R16, VAR_HORAS_D 
+		INC R16
+		STS VAR_HORAS_D, R16
+		CLR R16     
+		RJMP SALIR_ISR_TMR0
 
 	INC_VAR_DIAS_U:
-	CLR R16
-	STS VAR_HORAS_U, R16
-	STS VAR_HORAS_D, R16
+		CLR R16
+		STS VAR_HORAS_U, R16
+		STS VAR_HORAS_D, R16
 
-    LDS R16, VAR_DIAS_U 
-	LDS R17, VAR_DIAS_D 
-	SWAP R17
-	INC R16
-	OR R17, R16
-	LDS R16, VAR_MES
-	CP R17, R16			
-    BREQ INC_VAR_MES_U
+		LDS R16, VAR_DIAS_U 
+		LDS R17, VAR_DIAS_D 
+		SWAP R17
+		INC R16
+		OR R17, R16
+		LDS R16, VAR_MES
+		CP R17, R16			
+		BREQ INC_VAR_MES_U
 
-	CPI R16, 10
-	BREQ INC_VAR_DIAS_D
+		CPI R16, 10
+		BREQ INC_VAR_DIAS_D
 
-    STS VAR_DIAS_U, R16
-	CLR R17      
-    RJMP SALIR_ISR_TMR0
+	    STS VAR_DIAS_U, R16
+		CLR R17      
+	    RJMP SALIR_ISR_TMR0
 
 
 	INC_VAR_DIAS_D:
-	CLR R16
-	STS VAR_DIAS_U, R16
+		CLR R16
+		STS VAR_DIAS_U, R16
 
-    LDS R16, VAR_DIAS_D 
-	INC R16
-	STS VAR_DIAS_D, R16
+   		LDS R16, VAR_DIAS_D 
+		INC R16
+		STS VAR_DIAS_D, R16
 
-	CLR R16     
-	RJMP SALIR_ISR_TMR0
+		CLR R16     
+		RJMP SALIR_ISR_TMR0
 
 
 	INC_VAR_MES_U:
-	LDI R16, 1
-	STS VAR_DIAS_U, R16
-	CLR R16
-	STS VAR_DIAS_D, R16
+		LDI R16, 1
+		STS VAR_DIAS_U, R16
+		CLR R16
+		STS VAR_DIAS_D, R16
 
-    LDS R16, VAR_MES_U 
-	LDS R17, VAR_MES_D 
-	SWAP R17
-	INC R16
-	OR R17, R16
-	CPI R17, 0x13			
-    BREQ RST_MES
+		LDS R16, VAR_MES_U 
+		LDS R17, VAR_MES_D 
+		SWAP R17
+		INC R16
+		OR R17, R16
+		CPI R17, 0x13			
+		BREQ RST_MES
 
-	CPI R16, 10
-	BREQ INC_VAR_MES_D
+		CPI R16, 10
+		BREQ INC_VAR_MES_D
 
-    STS VAR_MES_U, R16
-	CLR R17      
-    RJMP SALIR_ISR_TMR0
+		STS VAR_MES_U, R16
+		CLR R17      
+		RJMP SALIR_ISR_TMR0
 
 
 	INC_VAR_MES_D:
-	CLR R16
-	STS VAR_MES_U, R16
+		CLR R16
+		STS VAR_MES_U, R16
 
-    LDS R16, VAR_MES_D 
-	INC R16
-	STS VAR_MES_D, R16
+		LDS R16, VAR_MES_D 
+		INC R16
+		STS VAR_MES_D, R16
 
-	CLR R16     
-	RJMP SALIR_ISR_TMR0
+		CLR R16     
+		RJMP SALIR_ISR_TMR0
 
 	RST_MES:
-	CLR R16
-	STS VAR_MES_D, R16
-	LDI R16, 1
-	STS VAR_MES_U, R16
+		CLR R16
+		STS VAR_MES_D, R16
+		LDI R16, 1
+		STS VAR_MES_U, R16
 	
 
 	SALIR_ISR_TMR0:
@@ -1043,29 +1042,29 @@ TIMER0_OVF:
 	CLR R16
 
 
-// Operacion
-INC DPLY_ENCENDIDO
-CPI DPLY_ENCENDIDO, 4
-BRLO Apagar_Displays    ; si < 4, sigue normal
-CLR DPLY_ENCENDIDO      ; si >= 4, resetea
+	// Operacion
+	INC DPLY_ENCENDIDO
+	CPI DPLY_ENCENDIDO, 4
+	BRLO Apagar_Displays    ; si < 4, sigue normal
+	CLR DPLY_ENCENDIDO      ; si >= 4, resetea
 
 
 	Apagar_Displays:
-    IN R16, PORTB
-    ORI R16, 0x0F       ; apaga transistores (PB0-PB3)
-    OUT PORTB, R16
+		IN R16, PORTB
+		ORI R16, 0x0F       ; apaga transistores (PB0-PB3)
+		OUT PORTB, R16
 
-    IN R16, PORTD
-    ORI R16, 0x7F
-    OUT PORTD, R16
+		IN R16, PORTD
+		ORI R16, 0x7F
+		OUT PORTD, R16
 
-    ; --- delay de blanking ---
-    PUSH R17
-    LDI R17, 50
-blank_loop:
-    DEC R17
-    BRNE blank_loop
-    POP R17
+		; --- delay de blanking ---
+		PUSH R17
+		LDI R17, 50
+		blank_loop:
+			DEC R17
+			BRNE blank_loop
+			POP R17
 
 	  ; --- elegir datos seg?n modo ---
 
@@ -1094,129 +1093,129 @@ blank_loop:
 
 	MODO_horario:
 
-	CPI DPLY_ENCENDIDO, 0
-    BREQ Cargar_Min_U
-    CPI DPLY_ENCENDIDO, 1
-    BREQ Cargar_Min_D
-    CPI DPLY_ENCENDIDO, 2
-    BREQ Cargar_Hora_U
+		CPI DPLY_ENCENDIDO, 0
+		BREQ Cargar_Min_U
+		CPI DPLY_ENCENDIDO, 1
+		BREQ Cargar_Min_D
+		CPI DPLY_ENCENDIDO, 2
+		BREQ Cargar_Hora_U
     
 		Cargar_Hora_D:
-		LDS R16, VAR_HORAS_D
-		RJMP Dibujar_Numero
+			LDS R16, VAR_HORAS_D
+			RJMP Dibujar_Numero
 		Cargar_Hora_U:
-	    LDS R16, VAR_HORAS_U 
-		RJMP Dibujar_Numero
+			LDS R16, VAR_HORAS_U 
+			RJMP Dibujar_Numero
 		Cargar_Min_D:
-	    LDS R16, VAR_MINUTOS_D 
-		RJMP Dibujar_Numero
+			LDS R16, VAR_MINUTOS_D 
+			RJMP Dibujar_Numero
 		Cargar_Min_U:
-	    LDS R16, VAR_MINUTOS_U 
-		RJMP Dibujar_Numero
+	    	LDS R16, VAR_MINUTOS_U 
+			RJMP Dibujar_Numero
 			
 
 	MODO_fecha:
-	; Elegir variable seg?n el display
-    CPI DPLY_ENCENDIDO, 0
-    BREQ Cargar_Dia_U
-    CPI DPLY_ENCENDIDO, 1
-    BREQ Cargar_Dia_D
-    CPI DPLY_ENCENDIDO, 2
-    BREQ Cargar_Mes_U
-    
-	Cargar_Mes_D:
-	    LDS R16, VAR_MES_D 
-		RJMP Dibujar_Numero
-	Cargar_Mes_U:
-	    LDS R16, VAR_MES_U 
-		RJMP Dibujar_Numero
-	Cargar_Dia_D:
-	    LDS R16, VAR_DIAS_D 
-		RJMP Dibujar_Numero
-	Cargar_Dia_U:
-	    LDS R16, VAR_DIAS_U 
-		RJMP Dibujar_Numero
+		; Elegir variable seg?n el display
+		CPI DPLY_ENCENDIDO, 0
+		BREQ Cargar_Dia_U
+		CPI DPLY_ENCENDIDO, 1
+		BREQ Cargar_Dia_D
+		CPI DPLY_ENCENDIDO, 2
+		BREQ Cargar_Mes_U
+		
+		Cargar_Mes_D:
+			LDS R16, VAR_MES_D 
+			RJMP Dibujar_Numero
+		Cargar_Mes_U:
+			LDS R16, VAR_MES_U 
+			RJMP Dibujar_Numero
+		Cargar_Dia_D:
+			LDS R16, VAR_DIAS_D 
+			RJMP Dibujar_Numero
+		Cargar_Dia_U:
+			LDS R16, VAR_DIAS_U 
+			RJMP Dibujar_Numero
 
-MODO_letras:
+	MODO_letras:
+		
+		CPI DPLY_ENCENDIDO, 0
+		BREQ Cargar_O
+		CPI DPLY_ENCENDIDO, 1
+		BREQ Cargar_N
+		CPI DPLY_ENCENDIDO, 2
+		BREQ Cargar_O
+		
+		Cargar_F:
+			LDI R16,2
+			LDI ZH, HIGH(dispON_OFF<<1)
+			LDI ZL, LOW(dispON_OFF<<1)
+			ADD ZL, R16
+			ADC ZH, R1              ; R1 es 0
+			LPM R17, Z
+			IN R16, PORTD          
+			ANDI R16, 0x80         
+			ANDI R17, 0x7F          
+			OR R17, R16             
+			OUT PORTD, R17
+			RJMP Activar_Transistor          
+
+		Cargar_O:
+			LDI ZH, HIGH(dispON_OFF<<1)
+			LDI ZL, LOW(dispON_OFF<<1)
+			LPM R17, Z
+			IN R16, PORTD          
+			ANDI R16, 0x80         
+			ANDI R17, 0x7F          
+			OR R17, R16             
+			OUT PORTD, R17 
+			RJMP Activar_Transistor
+
+		Cargar_N:
+			LDI R16,1
+			LDI ZH, HIGH(dispON_OFF<<1)
+			LDI ZL, LOW(dispON_OFF<<1)
+			ADD ZL, R16
+			ADC ZH, R1              ; R1 es 0
+			LPM R17, Z
+			IN R16, PORTD          
+			ANDI R16, 0x80         
+			ANDI R17, 0x7F          
+			OR R17, R16             
+			OUT PORTD, R17
+			RJMP Activar_Transistor 
+
+	Dibujar_Numero:
 	
-	CPI DPLY_ENCENDIDO, 0
-    BREQ Cargar_O
-    CPI DPLY_ENCENDIDO, 1
-    BREQ Cargar_N
-    CPI DPLY_ENCENDIDO, 2
-    BREQ Cargar_O
-	
-	Cargar_F:
-	LDI R16,2
-	LDI ZH, HIGH(dispON_OFF<<1)
-    LDI ZL, LOW(dispON_OFF<<1)
-    ADD ZL, R16
-    ADC ZH, R1              ; R1 es 0
-    LPM R17, Z
-	IN R16, PORTD          
-    ANDI R16, 0x80         
-    ANDI R17, 0x7F          
-    OR R17, R16             
-    OUT PORTD, R17
-	RJMP Activar_Transistor          
-
-	Cargar_O:
-	LDI ZH, HIGH(dispON_OFF<<1)
-    LDI ZL, LOW(dispON_OFF<<1)
-    LPM R17, Z
-	IN R16, PORTD          
-    ANDI R16, 0x80         
-    ANDI R17, 0x7F          
-    OR R17, R16             
-    OUT PORTD, R17 
-	RJMP Activar_Transistor
-
-	Cargar_N:
-	LDI R16,1
-	LDI ZH, HIGH(dispON_OFF<<1)
-    LDI ZL, LOW(dispON_OFF<<1)
-    ADD ZL, R16
-    ADC ZH, R1              ; R1 es 0
-    LPM R17, Z
-	IN R16, PORTD          
-    ANDI R16, 0x80         
-    ANDI R17, 0x7F          
-    OR R17, R16             
-    OUT PORTD, R17
-	RJMP Activar_Transistor 
-
-Dibujar_Numero:
-   
-    LDI ZH, HIGH(disp7seg<<1)
-    LDI ZL, LOW(disp7seg<<1)
-    ADD ZL, R16
-    ADC ZH, R1              ; R1 es 0
-    LPM R17, Z
-	IN R16, PORTD           ; Lee c?mo est? el puerto D actualmente (con el LED)
-    ANDI R16, 0x80          ; Conserva SOLO el bit 7 (PD7) y borra el resto
-    ANDI R17, 0x7F          ; Asegura que el n?mero del display no toque el bit 7
-    OR R17, R16             ; Combina el LED encendido/apagado con el n?mero
-    OUT PORTD, R17          ; Mandar a los segmentos
+		LDI ZH, HIGH(disp7seg<<1)
+		LDI ZL, LOW(disp7seg<<1)
+		ADD ZL, R16
+		ADC ZH, R1              ; R1 es 0
+		LPM R17, Z
+		IN R16, PORTD           ; Lee c?mo est? el puerto D actualmente (con el LED)
+		ANDI R16, 0x80          ; Conserva SOLO el bit 7 (PD7) y borra el resto
+		ANDI R17, 0x7F          ; Asegura que el n?mero del display no toque el bit 7
+		OR R17, R16             ; Combina el LED encendido/apagado con el n?mero
+		OUT PORTD, R17          ; Mandar a los segmentos
 
 
 
-Activar_Transistor:
-    LDI ZH, HIGH(multDisp<<1)
-    LDI ZL, LOW(multDisp<<1)
-    ADD ZL, DPLY_ENCENDIDO
-    ADC ZH, R1
-    LPM R16, Z             
+	Activar_Transistor:
+		LDI ZH, HIGH(multDisp<<1)
+		LDI ZL, LOW(multDisp<<1)
+		ADD ZL, DPLY_ENCENDIDO
+		ADC ZH, R1
+		LPM R16, Z             
 
- IN R17, PORTB
-    ANDI R17, 0xF0         ; Limpia bits 0-3, conserva 4-7
-    OR R17, R16            ; Combina solo los bits bajos
-    OUT PORTB, R17         
+	IN R17, PORTB
+		ANDI R17, 0xF0         ; Limpia bits 0-3, conserva 4-7
+		OR R17, R16            ; Combina solo los bits bajos
+		OUT PORTB, R17         
 
-Salir_Timer0:
-   	// Retornar Contexto
-	POP R16
-	OUT SREG, R16
-	POP R17
-	POP R16
-	// Salir de Interrupcion
-    RETI
+	Salir_Timer0:
+		// Retornar Contexto
+		POP R16
+		OUT SREG, R16
+		POP R17
+		POP R16
+		// Salir de Interrupcion
+		RETI
