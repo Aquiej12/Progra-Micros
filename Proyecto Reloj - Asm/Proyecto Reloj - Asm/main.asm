@@ -52,6 +52,7 @@ Consideraciones
 	VAR_ALARMA_MINUTOS_D:		.byte 1  // Reserva 1 byte para Mes
 	VAR_MES:			.byte 1	 // Reserva 1 byte para que numero de mes estamos
 	VAR_PINC_PREV:		.byte 1  // Estado anterior de PINC
+	VAR_ALARMA_ESTADO:			.byte 1  // Reserva 1 byte para guardar estado de alarma
 .cseg
 
 
@@ -106,6 +107,7 @@ STS VAR_ALARMA_HORAS_U, R16
 STS VAR_ALARMA_HORAS_D, R16
 STS VAR_ALARMA_MINUTOS_U, R16
 STS VAR_ALARMA_MINUTOS_D, R16
+STS VAR_ALARMA_ESTADO, R16
 
 ;========================================
 // Configurar entradas y salidas
@@ -245,11 +247,11 @@ STS UCSR0B, R18
 	
 	// Palabra "ON" en Display 7 segmentos Anodo Com?n
 	
-	dispON_OFF: .DB 0b00000001, 0b00010011, 0b01110001, 0x00
+	dispON_OFF: .DB 0x40, 0x48, 0x0E, 0x00
 	
 
 	// D?as m?ximos de cada mes (El primer 0 es relleno para el mes 0)
-	tabla_meses_u: .DB 0x00, 0x32, 0x29, 0x32, 0x31, 0x32, 0x31, 0x32, 0x32, 0x31, 0x32, 0x31, 0x32, 0x00
+	tabla_meses_u: .DB 0x00, 0x42, 0x39, 0x42, 0x41, 0x42, 0x41, 0x42, 0x42, 0x41, 0x42, 0x41, 0x42, 0x00
 	
 ;========================================
 // LIMPIAR REGISTROS
@@ -267,24 +269,7 @@ CLR MODE
 
 MAIN_LOOP:
 
-
-	LDS R17, VAR_MES_D
-	LDS R16, VAR_MES_U
-	LDI R18, 10
-
-	MUL R17, R18
-	ADD R0, R16
-
-	MOV R16, R0
-	CLR R1
-
-	LDI ZH, HIGH(tabla_meses_u<<1)
-	LDI ZL, LOW(tabla_meses_u<<1)
-	ADD ZL, R16
-	ADC ZH, R1              ; R1 es 0
-	LPM R17, Z
-	
-	STS VAR_MES, R17
+	RCALL ACTUALIZAR_MES
 	
 	CPI MODE, 0b000
 	BREQ MODO_HORA
@@ -298,11 +283,14 @@ MAIN_LOOP:
 	CPI MODE, 0b011
 	BREQ CONFIGURAR_FECHA1
 	
+	CPI MODE, 0b100
+	BREQ CONFIGURAR_ALARMA1
 	RJMP MAIN_LOOP
 	
 	CONFIGURAR_FECHA1:
 		JMP CONFIGURAR_FECHA
-	
+	CONFIGURAR_ALARMA1:
+		JMP CONFIGURAR_ALARMA
 MODO_HORA:
     CBI PORTB, PORTB5    ; apaga LED fecha
     SBI PORTB, PORTB4    ; enciende LED hora
@@ -330,6 +318,7 @@ CONFIGURAR_HORA:
 	STS TCCR0B, R16
 	
 	SELECCION_DISP_CONFIGURAR:
+
 	CPI CONFIGURACION, 0
 	BREQ CONFIGURAR_VAR_MINUTOS_U
 
@@ -536,16 +525,20 @@ CONFIGURAR_HORA:
 	RJMP MAIN_LOOP
 
 
+	//******************************************************************
+
 CONFIGURAR_FECHA: 
     CBI PORTB, PORTB4
     SBI PORTB, PORTB5
 
+	RCALL VALIDAR_DIA_MES 
     LDS R16, TCCR0B
     ANDI R16, 0xF8
     ORI R16, (1<<CS02)
     STS TCCR0B, R16
 
     SELECCION_DISP_CONFIGURAR_FECHA:
+		RCALL VALIDAR_DIA_MES
         CPI CONFIGURACION, 0
         BREQ CONFIGURAR_VAR_MES_U
         CPI CONFIGURACION, 1
@@ -573,67 +566,75 @@ CONFIGURAR_FECHA:
 
 INC_VAR_MES_UNI:
     CLR BANDERA
+	RCALL VALIDAR_DIA_MES
     ; Verificar si ya es mes 12 (decena=1, unidad=2)
     LDS R16, VAR_MES_U
     LDS R17, VAR_MES_D
     CPI R17, 1
+
     BRNE INC_MES_NORMAL
-    CPI R16, 2
-    BREQ RST_MES_DESDE_12
+
+    INC R16
+	CPI R16, 3
+	BRNE STS_VAR_MES_U
+	CLR R16
+	RJMP STS_VAR_MES_U
+
 INC_MES_NORMAL:
-    ; No es 12: incrementar unidad
-    LDS R16, VAR_MES_U
     INC R16
     CPI R16, 10
-    BRNE INC_MES_GUARDAR
-    CLR R16                 ; ciclo 0-9 (pero mes no puede ser 0, se ajusta después)
-INC_MES_GUARDAR:
+    BRNE STS_VAR_MES_U
+
+
+
+    LDI R16, 1
+	                
+	RJMP STS_VAR_MES_U
+
+STS_VAR_MES_U:
     STS VAR_MES_U, R16
-    CALL ACTUALIZAR_MES     ; actualiza VAR_MES
+	RCALL ACTUALIZAR_MES
+	RCALL VALIDAR_DIA_MES
     RJMP SALIR_CONFIGURAR_FECHA
 
-RST_MES_DESDE_12:
-    ; De 12 pasa a 01
-    CLR R16
-    STS VAR_MES_D, R16
-    LDI R16, 1
-    STS VAR_MES_U, R16
-    CALL ACTUALIZAR_MES
-    RJMP SALIR_CONFIGURAR_FECHA
 
 DEC_VAR_MES_UNI:
     CLR BANDERA
-    ; Verificar si es mes 01
+	RCALL VALIDAR_DIA_MES
     LDS R16, VAR_MES_U
     LDS R17, VAR_MES_D
-    CPI R17, 0
+
+    CPI R17, 1
     BRNE DEC_MES_NORMAL
-    CPI R16, 1
-    BREQ RST_MES_DESDE_01
+	
+	DEC R16
+	CPI R16, 0xFF
+	BRNE DEC_MES_GUARDAR
+	LDI R16, 2
+	RJMP DEC_MES_GUARDAR
+
+
 DEC_MES_NORMAL:
-    ; No es 01: decrementar unidad
-    LDS R16, VAR_MES_U
     DEC R16
-    CPI R16, 0xFF
+    CPI R16, 0
     BRNE DEC_MES_GUARDAR
     LDI R16, 9
+
+
 DEC_MES_GUARDAR:
     STS VAR_MES_U, R16
-    CALL ACTUALIZAR_MES
+	RCALL ACTUALIZAR_MES
+	RCALL VALIDAR_DIA_MES
     RJMP SALIR_CONFIGURAR_FECHA
 
-RST_MES_DESDE_01:
-    ; De 01 pasa a 12
-    LDI R16, 1
-    STS VAR_MES_D, R16
-    LDI R16, 2
-    STS VAR_MES_U, R16
-    CALL ACTUALIZAR_MES
-    RJMP SALIR_CONFIGURAR_FECHA
+
+
     ;========================================
     ; DISPLAY PB1 = Decenas Mes (CONFIGURACION=1)
     ;========================================
     CONFIGURAR_VAR_MES_D:
+	RCALL VALIDAR_DIA_MES 
+
         CPI BANDERA, 2
         BREQ INC_VAR_MES_DEC
         CPI BANDERA, 1
@@ -642,118 +643,155 @@ RST_MES_DESDE_01:
 
         INC_VAR_MES_DEC:
             CLR BANDERA
+			RCALL VALIDAR_DIA_MES
+
             LDS R16, VAR_MES_D
+			LDS R17, VAR_MES_U
             INC R16
-            CPI R16, 2              ; decena máxima posible es 1 (mes 10,11,12)
-            BRNE STS_MES_D
-            CLR R16                 ; 2 → wrap a 0
-            STS_MES_D:
-                STS VAR_MES_D, R16
-            ; si decena volvió a 0, unidad mínima es 1
-            CPI R16, 0
-            BRNE FIN_INC_MES_DEC
-            LDS R16, VAR_MES_U
-            CPI R16, 1
-            BRSH FIN_INC_MES_DEC
-            LDI R16, 1
-            STS VAR_MES_U, R16
-            FIN_INC_MES_DEC:
-        RJMP SALIR_CONFIGURAR_FECHA
+
+			CPI R16, 1
+			BREQ INC_VAR_MES_DECENAS
+            CPI R16,2
+			BRNE STS_VAR_MES_D
+            CLR R16  
+			RJMP STS_VAR_MES_D
+
+			INC_VAR_MES_DECENAS:
+				CPI R17, 3
+
+			    BRLO STS_VAR_MES_D
+				LDI R17, 2
+				STS VAR_MES_U, R17
+				RJMP STS_VAR_MES_D
+
+				STS_VAR_MES_D:
+				STS VAR_MES_D, R16
+				RCALL ACTUALIZAR_MES
+				RCALL VALIDAR_DIA_MES
+              RJMP SALIR_CONFIGURAR_FECHA
 
         DEC_VAR_MES_DEC:
             CLR BANDERA
+			RCALL VALIDAR_DIA_MES
             LDS R16, VAR_MES_D
             DEC R16
             CPI R16, 0xFF
-            BRNE SALIR_DEC_VAR_MES_DEC
+            BRNE STS_VAR_MES_DEC
+
             LDI R16, 1              ; underflow → wrap a 1
-            SALIR_DEC_VAR_MES_DEC:
-                STS VAR_MES_D, R16
-            ; si decena quedó en 1, unidad máxima es 2
-            CPI R16, 1
-            BRNE FIN_DEC_MES_DEC
-            LDS R16, VAR_MES_U
-            CPI R16, 3
-            BRLO FIN_DEC_MES_DEC
-            LDI R16, 2
-            STS VAR_MES_U, R16
-            FIN_DEC_MES_DEC:
+			LDS R17, VAR_MES_U
+			CPI R17, 3
+			BRLO STS_VAR_MES_DEC
+
+			LDI R17, 2
+			STS VAR_MES_U, R17
+			RJMP STS_VAR_MES_DEC
+
+			STS_VAR_MES_DEC:
+            STS VAR_MES_D, R16
+			RCALL ACTUALIZAR_MES
         RJMP SALIR_CONFIGURAR_FECHA
 
     ;========================================
     ; DISPLAY PB2 = Unidades Día (CONFIGURACION=2)
     ;========================================
     CONFIGURAR_VAR_DIA_U:
-    CPI BANDERA, 2
-    BREQ INC_VAR_DIA_UNI
-    CPI BANDERA, 1
-    BREQ DEC_VAR_DIA_UNI
-    RJMP SALIR_CONFIGURAR_FECHA
+	RCALL VALIDAR_DIA_MES 
+        CPI BANDERA, 2
+        BREQ INC_VAR_DIA_UNI
+        CPI BANDERA, 1
+        BREQ DEC_VAR_DIA_UNI
+        RJMP SALIR_CONFIGURAR_FECHA
 
 INC_VAR_DIA_UNI:
     CLR BANDERA
-    ; Verificar si ya es el último día del mes
-    LDS R16, VAR_DIAS_U
-    LDS R17, VAR_DIAS_D
-    SWAP R17
-    OR R17, R16              ; R17 = día actual en BCD
-    LDS R18, VAR_MES         ; límite
-    CP R17, R18
-    BREQ RST_DIA_DESDE_ULTIMO
-    ; No es último: incrementar unidad
-    LDS R16, VAR_DIAS_U
-    INC R16
-    CPI R16, 10
-    BRNE INC_DIA_GUARDAR
-    CLR R16                   ; ciclo 0-9
-INC_DIA_GUARDAR:
-    STS VAR_DIAS_U, R16
-    RJMP SALIR_CONFIGURAR_FECHA
+	RCALL VALIDAR_DIA_MES
+   
+	LDS R16, VAR_DIAS_U
+	LDS R17, VAR_DIAS_D
+	LDS R18, VAR_MES
+	SWAP R18
+	ANDI R18, 0b00001111
+	SUBI R18, 0x010
+	
+	CP R17, R18
+	BREQ REVISAR_ULTIMO_DIA_MES
 
-RST_DIA_DESDE_ULTIMO:
-    ; Ir a 01 (mismo mes)
-    CLR R16
-    STS VAR_DIAS_D, R16
-    LDI R16, 1
-    STS VAR_DIAS_U, R16
+	INC R16
+	CPI R16, 10
+	BRNE STS_VAR_DIAS_UNIDAD
+	LDI R16, 0
+	RJMP STS_VAR_DIAS_UNIDAD
+
+
+	REVISAR_ULTIMO_DIA_MES:
+	INC R16
+	LDS R18, VAR_MES
+	ANDI R18, 0b00001111
+
+	CP R16, R18
+	BREQ ES_ULTIMO_DIA
+
+	RJMP STS_VAR_DIAS_UNIDAD
+
+	ES_ULTIMO_DIA:
+	LDI R16, 0
+	RJMP STS_VAR_DIAS_UNIDAD
+
+
+
+	STS_VAR_DIAS_UNIDAD:
+	STS VAR_DIAS_U, R16
+	RCALL VALIDAR_DIA_MES
     RJMP SALIR_CONFIGURAR_FECHA
 
 DEC_VAR_DIA_UNI:
-    CLR BANDERA
-    ; Verificar si es el primer día (01)
-    LDS R16, VAR_DIAS_U
-    LDS R17, VAR_DIAS_D
-    CPI R17, 0
-    BRNE DEC_DIA_NORMAL
-    CPI R16, 1
-    BREQ RST_DIA_DESDE_PRIMERO
-DEC_DIA_NORMAL:
-    ; No es primero: decrementar unidad
-    LDS R16, VAR_DIAS_U
-    DEC R16
-    CPI R16, 0xFF
-    BRNE DEC_DIA_GUARDAR
-    LDI R16, 9
-DEC_DIA_GUARDAR:
-    STS VAR_DIAS_U, R16
-    RJMP SALIR_CONFIGURAR_FECHA
+	
+            CLR BANDERA
+            
+			LDS R16, VAR_DIAS_U
+			LDS R17, VAR_DIAS_D
+			LDS R18, VAR_MES
 
-RST_DIA_DESDE_PRIMERO:
-    ; Ir al último día del mes
-    LDS R16, VAR_MES
-    MOV R17, R16
-    ANDI R17, 0xF0
-    SWAP R17
-    STS VAR_DIAS_D, R17
-    ANDI R16, 0x0F
-    STS VAR_DIAS_U, R16
-    RJMP SALIR_CONFIGURAR_FECHA
+			DEC R16
 
+			CPI R16, 0xFF
+			BREQ DEC_VAR_DIAS_U_ESMENOR0
+
+			RJMP DEC_STS_VAR_DIAS_UNIDADES
+
+			
+			DEC_VAR_DIAS_U_ESMENOR0:
+			ANDI R18, 0b11110000
+			SWAP R18
+			SUBI R18, 0x01
+			CP R17, R18
+			BREQ DECENAS_ESTA_EN_LIMITE
+			LDI R16, 9
+			RJMP DEC_STS_VAR_DIAS_UNIDADES
+
+
+			
+
+
+			DECENAS_ESTA_EN_LIMITE:
+			LDS R18, VAR_MES
+			ANDI R18, 0b00001111
+			SUBI R18, 0x01
+			MOV R16, R18
+			
+			RJMP DEC_STS_VAR_DIAS_UNIDADES
+
+	DEC_STS_VAR_DIAS_UNIDADES:
+	STS VAR_DIAS_U, R16
+	RCALL VALIDAR_DIA_MES
+    RJMP SALIR_CONFIGURAR_FECHA
 
     ;========================================
     ; DISPLAY PB3 = Decenas Día (CONFIGURACION=3)
     ;========================================
     CONFIGURAR_VAR_DIA_D:
+	RCALL VALIDAR_DIA_MES 
         CPI BANDERA, 2
         BREQ INC_VAR_DIA_DEC
         CPI BANDERA, 1
@@ -762,72 +800,86 @@ RST_DIA_DESDE_PRIMERO:
 
         INC_VAR_DIA_DEC:
             CLR BANDERA
-            LDS R17, VAR_DIAS_D
-            INC R17
-            LDS R16, VAR_MES
-            ANDI R16, 0xF0
-            SWAP R16                ; decena máxima del mes
-            CP R17, R16
-            BREQ RST_VAR_DIA_DEC    ; llegó al máximo → wrap
-            ; No llegó: guardar decena nueva
-            STS VAR_DIAS_D, R17
-            ; Verificar que la unidad no supere la unidad máxima del mes
-            ; (solo aplica si la nueva decena == decena máxima)
-            LDS R16, VAR_MES
-            ANDI R16, 0xF0
-            SWAP R16
-            CP R17, R16
-            BRNE FIN_INC_DIA_DEC
-            LDS R16, VAR_MES
-            ANDI R16, 0x0F          ; unidad máxima del mes
-            LDS R17, VAR_DIAS_U
-            CP R17, R16
-            BRLO FIN_INC_DIA_DEC
-            LDS R16, VAR_MES
-            ANDI R16, 0x0F
-            STS VAR_DIAS_U, R16
-            RJMP FIN_INC_DIA_DEC
-            RST_VAR_DIA_DEC:
-                CLR R16
-                STS VAR_DIAS_D, R16
-                LDI R16, 1
-                STS VAR_DIAS_U, R16  ; día mínimo = 01
-            FIN_INC_DIA_DEC:
+
+			LDS R16, VAR_DIAS_D
+			LDS R17, VAR_DIAS_U
+			LDS R18, VAR_MES
+			ANDI R18, 0b11110000
+			SWAP R18
+
+			INC R16
+
+
+			CP R16, R18
+			BREQ ES_ULTIMO_DIA_DECENA
+
+			SUBI R18, 0x01
+			CP R16, R18
+			BREQ ES_LIMITE_MES
+
+			RJMP STS_VAR_DIAS_DECENAS
+
+			ES_LIMITE_MES:
+			LDS R18, VAR_MES
+			ANDI R18, 0b00001111
+			CP R17, R18
+			BRLO STS_VAR_DIAS_DECENAS
+			SUBI R18, 0x01
+			MOV R17, R18
+			RJMP STS_VAR_DIAS_DECENAS
+			
+			ES_ULTIMO_DIA_DECENA:
+			CLR R16
+			RJMP STS_VAR_DIAS_DECENAS
+
+
+
+			STS_VAR_DIAS_DECENAS:
+			STS VAR_DIAS_D, R16
+			RCALL VALIDAR_DIA_MES
+
         RJMP SALIR_CONFIGURAR_FECHA
 
         DEC_VAR_DIA_DEC:
             CLR BANDERA
-            LDS R17, VAR_DIAS_D
-            DEC R17
-            CPI R17, 0xFF
-            BREQ DEC_VAR_DIA_DEC_0
-            ; No underflow: guardar decena y verificar unidad
-            STS VAR_DIAS_D, R17
-            ; Si la decena bajó a 0, la unidad mínima es 1
-            CPI R17, 0
-            BRNE FIN_DEC_DIA_DEC
-            LDS R16, VAR_DIAS_U
-            CPI R16, 1
-            BRSH FIN_DEC_DIA_DEC
-            LDI R16, 1
-            STS VAR_DIAS_U, R16
-            RJMP FIN_DEC_DIA_DEC
+            
+			LDS R16, VAR_DIAS_D
+			LDS R17, VAR_DIAS_U
+			LDS R18, VAR_MES
 
-            DEC_VAR_DIA_DEC_0:
-            ; underflow → wrap a decena máxima del mes, con unidad máxima
-                LDS R16, VAR_MES
-                MOV R17, R16
-                ANDI R17, 0xF0
-                SWAP R17
-                STS VAR_DIAS_D, R17      ; guardar decena máxima
-                ANDI R16, 0x0F           ; unidad máxima del mes
-                STS VAR_DIAS_U, R16      ; guardar unidad máxima
+			DEC R16
 
-            FIN_DEC_DIA_DEC:
+			CPI R16, 0xFF
+			BREQ DEC_VAR_DIAS_ESMENOR0
+
+			RJMP DEC_STS_VAR_DIAS_DECENAS
+
+			
+			DEC_VAR_DIAS_ESMENOR0:
+			ANDI R18, 0b11110000
+			SWAP R18
+			SUBI R18, 0x01
+			MOV R16, R18
+			LDS R18, VAR_MES
+			ANDI R18, 0b00001111
+			CP R17, R18
+			BRLO DEC_STS_VAR_DIAS_DECENAS
+			SUBI R18, 0x01
+			MOV R17, R18
+			STS VAR_DIAS_U, R17
+			RJMP DEC_STS_VAR_DIAS_DECENAS
+
+
+			DEC_STS_VAR_DIAS_DECENAS:
+			STS VAR_DIAS_D, R16
+			RCALL VALIDAR_DIA_MES
+
         RJMP SALIR_CONFIGURAR_FECHA
 
+
     ;========================================
-    SALIR_CONFIGURAR_FECHA:
+   SALIR_CONFIGURAR_FECHA:
+		RCALL VALIDAR_DIA_MES
         CPI MODE, 0b011
         BRNE SALIR_MODE_S3
         JMP SELECCION_DISP_CONFIGURAR_FECHA
@@ -840,35 +892,272 @@ RST_DIA_DESDE_PRIMERO:
 
         JMP MAIN_LOOP
 
+
+CONFIGURAR_ALARMA:
+	    CBI PORTB, PORTB5    ; apaga LED fecha
+		SBI PORTB, PORTB4    ; enciende LED hora
+
+	; Prescaler 256 ? m�s lento ? parpadeo visible
+	LDS R16, TCCR0B
+	ANDI R16, 0xF8          ; limpiar bits CS02, CS01, CS00
+	ORI R16, (1<<CS02)      ; prescaler 256
+	STS TCCR0B, R16
+	
+	SELECCION_DISP_CONFIGURAR_ALARMA:
+	CPI CONFIGURACION, 0
+	BREQ CONFIGURAR_VAR_ALARMA_MINUTOS_U
+
+	CPI CONFIGURACION, 1
+	BREQ CONFIGURAR_VAR_ALARMA_MINUTOS_D	
+
+	CPI CONFIGURACION, 2
+	BREQ CONFIGURAR_VAR_ALARMA_HORAS_U
+
+	JMP CONFIGURAR_VAR_ALARMA_HORAS_D
+
+	CONFIGURAR_VAR_ALARMA_MINUTOS_U:
+		CPI BANDERA, 2
+		BREQ INC_VAR_ALARMA_MINUTOS_UNI
+
+		CPI BANDERA, 1
+		BREQ DEC_VAR_ALARMA_MINUTOS_UNI
+
+		RJMP SALIR_CONFIGURAR_ALARMA
+
+		INC_VAR_ALARMA_MINUTOS_UNI:
+			CLR BANDERA
+			LDS R16, VAR_ALARMA_MINUTOS_U
+			INC R16 
+			CPI R16, 10
+			BRNE STS_MINUTOS_U_ALARMA      ; si NO es 10 → salta directo a guardar
+			CLR R16                 ; si ES 10 → limpia
+			STS_MINUTOS_U_ALARMA:
+				STS VAR_ALARMA_MINUTOS_U, R16  
+		RJMP SALIR_CONFIGURAR_ALARMA
+
+		DEC_VAR_ALARMA_MINUTOS_UNI:
+			CLR BANDERA
+			LDS R16, VAR_ALARMA_MINUTOS_U
+			DEC R16 
+			CPI R16, 0xFF             
+			BRNE SALIR_DEC_VAR_ALARMA_MINUTOS_UNI    
+			LDI R16, 9
+			SALIR_DEC_VAR_ALARMA_MINUTOS_UNI:
+				STS VAR_ALARMA_MINUTOS_U, R16  
+		RJMP SALIR_CONFIGURAR_ALARMA
+
+
+	CONFIGURAR_VAR_ALARMA_MINUTOS_D:
+
+		CPI BANDERA, 2
+		BREQ INC_VAR_ALARMA_MINUTOS_DEC
+		CPI BANDERA, 1
+		BREQ DEC_VAR_ALARMA_MINUTOS_DEC
+		RJMP SALIR_CONFIGURAR_ALARMA
+	
+		INC_VAR_ALARMA_MINUTOS_DEC:
+			CLR BANDERA
+
+			LDS R16, VAR_ALARMA_MINUTOS_D
+			INC R16             
+			CPI R16, 6
+			BRNE STS_MINUTOS_D_ALARMA     ; si NO es 6 → salta directo a guardar
+			CLR R16                 ; si ES 6 → limpia
+			STS_MINUTOS_D_ALARMA:
+				STS VAR_ALARMA_MINUTOS_D, R16  ; guarda en ambos casos
+				 
+		RJMP SALIR_CONFIGURAR_ALARMA
+	
+
+		DEC_VAR_ALARMA_MINUTOS_DEC:
+			CLR BANDERA
+
+			LDS R16, VAR_ALARMA_MINUTOS_D
+			DEC R16 
+			CPI R16, 0xFF             
+			BRNE SALIR_DEC_VAR_ALARMA_MINUTOS_DEC   
+			LDI R16, 5
+			SALIR_DEC_VAR_ALARMA_MINUTOS_DEC:
+				STS VAR_ALARMA_MINUTOS_D, R16  
+	
+		RJMP SALIR_CONFIGURAR_ALARMA
+	
+	
+
+	CONFIGURAR_VAR_ALARMA_HORAS_U:
+		CPI BANDERA, 2
+		BREQ INC_VAR_ALARMA_HORAS_UNI
+
+		CPI BANDERA, 1
+		BREQ DEC_VAR_ALARMA_HORAS_UNI
+
+		RJMP SALIR_CONFIGURAR_ALARMA
+
+			INC_VAR_ALARMA_HORAS_UNI:
+			CLR BANDERA
+			LDS R16, VAR_ALARMA_HORAS_U
+			LDS R17, VAR_ALARMA_HORAS_D
+			CPI R17, 2
+			BREQ INC_VAR_ALARMA_HORAS_UNI_2
+			INC R16 
+			CPI R16, 10
+			BRNE STS_HORAS_U_ALARMA      ; si NO es 10 → salta directo a guardar
+			CLR R16                 ; si ES 10 → limpia
+			RJMP STS_HORAS_U_ALARMA
+
+			INC_VAR_ALARMA_HORAS_UNI_2:
+			INC R16 
+			CPI R16, 4
+			BRNE STS_HORAS_U_ALARMA     ; si NO es 10 → salta directo a guardar
+			CLR R16                 ; si ES 10 → limpia
+			RJMP STS_HORAS_U_ALARMA
+
+			STS_HORAS_U_ALARMA:
+				STS VAR_ALARMA_HORAS_U, R16  
+			RJMP SALIR_CONFIGURAR_ALARMA
+
+			DEC_VAR_ALARMA_HORAS_UNI:
+			    CLR BANDERA
+			    LDS R16, VAR_ALARMA_HORAS_U
+			    DEC R16
+			    CPI R16, 0xFF              
+			    BRNE SALIR_DEC_VAR_ALARMA_HORAS_UNI
+			
+			    ; underflow → valor depende de la decena
+			    LDS R17, VAR_ALARMA_HORAS_D
+			    CPI R17, 2
+			    BREQ DEC_HORAS_UNI_ES2_ALARMA
+			    LDI R16, 9              ; decena 0 o 1 → unidad máx es 9
+			    RJMP SALIR_DEC_VAR_ALARMA_HORAS_UNI
+			    DEC_HORAS_UNI_ES2_ALARMA:
+			    LDI R16, 3              ; decena 2 → unidad máx es 3
+			
+			    SALIR_DEC_VAR_ALARMA_HORAS_UNI:
+			    STS VAR_ALARMA_HORAS_U, R16
+			RJMP SALIR_CONFIGURAR_ALARMA
+
+
+	CONFIGURAR_VAR_ALARMA_HORAS_D:
+
+			CPI BANDERA, 2
+			BREQ INC_VAR_ALARMA_HORAS_DEC
+			CPI BANDERA, 1
+			BREQ DEC_VAR_ALARMA_HORAS_DEC
+			RJMP SALIR_CONFIGURAR_ALARMA
+	
+			INC_VAR_ALARMA_HORAS_DEC:
+				CLR BANDERA
+				LDS R16, VAR_ALARMA_HORAS_D
+				INC R16 
+				CPI R16, 3
+				BRNE STS_HORAS_D_ALARMA     ; si NO es 6 → salta directo a guardar
+				CLR R16                 ; si ES 6 → limpia
+				STS_HORAS_D_ALARMA:
+					STS VAR_ALARMA_HORAS_D, R16 
+
+				CPI R16, 2	
+				BRNE SALIR_DEC_CHECK_ALARMA
+				LDS R16, VAR_ALARMA_HORAS_U
+				CPI R16, 4
+				BRLO SALIR_DEC_CHECK_ALARMA
+				LDI R16, 3
+				STS VAR_ALARMA_HORAS_U, R16
+				SALIR_DEC_CHECK_ALARMA:					 
+			RJMP SALIR_CONFIGURAR_ALARMA
+		 
+			DEC_VAR_ALARMA_HORAS_DEC:
+			    CLR BANDERA
+			    LDS R16, VAR_ALARMA_HORAS_D
+			    DEC R16
+			    CPI R16, 0xFF              
+			    BRNE STS_HORAS_D_DEC_ALARMA
+			    LDI R16, 2              ; underflow → regresa a 2
+			
+			    STS_HORAS_D_DEC_ALARMA:
+			        STS VAR_ALARMA_HORAS_D, R16
+			
+			    ; Si decena quedó en 2, verificar que unidad no sea > 3
+			    CPI R16, 2
+			    BRNE SALIR_DEC_HORAS_D_ALARMA
+			    LDS R16, VAR_ALARMA_HORAS_U
+			    CPI R16, 4
+			    BRLO SALIR_DEC_HORAS_D_ALARMA  ; si unidad < 4 está bien
+			    LDI R16, 3              ; si unidad >= 4 → forzar a 3
+			    STS VAR_ALARMA_HORAS_U, R16
+
+			SALIR_DEC_HORAS_D_ALARMA:
+		RJMP SALIR_CONFIGURAR_ALARMA
+
+
+	SALIR_CONFIGURAR_ALARMA:
+
+	CPI MODE, 0b100
+	BRNE SALIR_MODE_S4
+	JMP SELECCION_DISP_CONFIGURAR_ALARMA
+
+	SALIR_MODE_S4:
+
+	; Prescaler 64 ? velocidad normal (tu configuraci�n original)
+	LDS R16, TCCR0B
+	ANDI R16, 0xF8
+	ORI R16, (1<<CS01)|(1<<CS00)    ; prescaler 64
+	STS TCCR0B, R16
+	RJMP MAIN_LOOP
+
+
 ACTUALIZAR_MES:
+   ; Guardar registros que modificamos
+    PUSH R0          ; ← AGREGAR
+    PUSH R1          ; ← AGREGAR
     PUSH R16
     PUSH R17
     PUSH R18
-    PUSH R0
-    PUSH R1
-    PUSH ZH
-    PUSH ZL
-    LDS R16, VAR_MES_D
-    LDS R17, VAR_MES_U
-    LDI R18, 10
-    MUL R16, R18
-    ADD R0, R17
-    MOV R16, R0
-    CLR R1
-    LDI ZH, HIGH(tabla_meses_u<<1)
-    LDI ZL, LOW(tabla_meses_u<<1)
-    ADD ZL, R16
-    ADC ZH, R1
-    LPM R16, Z
-    STS VAR_MES, R16
-    POP ZL
-    POP ZH
-    POP R1
-    POP R0
-    POP R18
+	LDS R17, VAR_MES_D
+	LDS R16, VAR_MES_U
+	LDI R18, 10
+
+	MUL R17, R18
+	ADD R0, R16
+
+	MOV R16, R0
+	CLR R1
+
+	LDI ZH, HIGH(tabla_meses_u<<1)
+	LDI ZL, LOW(tabla_meses_u<<1)
+	ADD ZL, R16
+	ADC ZH, R1              ; R1 es 0
+	LPM R17, Z
+	
+	STS VAR_MES, R17
+	
+	POP R18
     POP R17
     POP R16
-    RET
+    POP R1           ; ← AGREGAR
+    POP R0 
+	RET
+
+VALIDAR_DIA_MES:  
+	LDS R17, VAR_MES
+	LDS R18, VAR_DIAS_D
+	LDS R16, VAR_DIAS_U
+	SWAP R18
+	OR R18, R16
+	CP R18, R17
+	BRLO SALIR_VALIDAR_DIA_MES
+
+	LDS R16, VAR_MES
+	ANDI R16, 0b00001111
+	SUBI R16, 0x01
+	STS  VAR_DIAS_U, R16
+
+	ANDI R17, 0b11110000
+	SUBI R17, 0x10
+	SWAP R17
+	STS VAR_DIAS_D, R17
+
+	SALIR_VALIDAR_DIA_MES:
+	   RET
 
 
 ///****************************************/
@@ -877,11 +1166,10 @@ ACTUALIZAR_MES:
 
 // Interrupcion por PINC
 ISR_PCINT1:
-    // Guardar contexto
-	PUSH R16
-	PUSH R17
-	IN R16, SREG
-	PUSH R16
+    PUSH R16
+    PUSH R17
+    IN R16, SREG
+    PUSH R16
 
 	
    ; ---- DELAY ANTIREBOTE SOFTWARE (~15ms) ----
@@ -893,7 +1181,7 @@ _dbnc_outer:
 _dbnc_inner:
     DEC R19
     BRNE _dbnc_inner
-    DEC R18
+    DEC R18 
     BRNE _dbnc_outer
     POP R19
     POP R18
@@ -936,11 +1224,22 @@ _dbnc_inner:
 
 
 	PRESSCONFIGURACION:
+	CPI MODE, 0b101
+	BREQ TOGGLE_ALARMA_ESTADO
+
 		INC CONFIGURACION
 		CPI CONFIGURACION, 4
 		BRNE SALIR_ISR_PINC
 		CLR CONFIGURACION
 		RJMP SALIR_ISR_PINC
+
+	TOGGLE_ALARMA_ESTADO:
+		LDS R16, VAR_ALARMA_ESTADO
+		LDI R17, 1
+		EOR R16, R17                    ; Hace XOR con 1 (cambia 0 a 1 y 1 a 0)
+		STS VAR_ALARMA_ESTADO, R16
+		RJMP SALIR_ISR_PINC
+
 	PRESSMODO:
 		INC MODE
 		CPI MODE, MAX_MODES
@@ -964,15 +1263,12 @@ _dbnc_inner:
 		RJMP SALIR_ISR_PINC
 
 
-	SALIR_ISR_PINC:
-		// Retornar Contexto
-
-		POP R16
-		OUT SREG, R16
-		POP R17
-		POP R16
-	// Salir de Interrupcion
-	RETI
+    SALIR_ISR_PINC:
+    POP R16
+    OUT SREG, R16
+    POP R17
+    POP R16
+    RETI
 
 
 
@@ -980,10 +1276,13 @@ _dbnc_inner:
 
 TMIER1_COMPA:
     // Guardar contexto
+	PUSH R0          ; ← AGREGAR
+    PUSH R1          ; ← AGREGAR
 	PUSH R16
 	PUSH R17
 	IN R16, SREG
 	PUSH R16
+	PUSH R18
 
 	// Operaciones
 
@@ -1114,14 +1413,18 @@ TMIER1_COMPA:
 		STS VAR_MES_D, R16
 		LDI R16, 1
 		STS VAR_MES_U, R16
+
 	
 
 	SALIR_ISR_TMR0:
 	// Retornar Contexto
+	POP R18
 	POP R16
 	OUT SREG, R16
 	POP R17
 	POP R16
+	POP R1           ; ← AGREGAR
+    POP R0           ; ← AGREGAR
 	// Salir de Interrupcion
     RETI
 
@@ -1134,6 +1437,7 @@ TIMER0_OVF:
 	PUSH R17
 	IN R16, SREG
 	PUSH R16
+	PUSH R18
 
 	// Recargar Timer0
     LDI R16, 99
@@ -1180,15 +1484,36 @@ TIMER0_OVF:
 	BREQ MODO_fecha
 
 	CPI MODE, 0b100
-	BREQ MODO_horario
+	BREQ MODO_alarma
 
 	CPI MODE, 0b101
 	BREQ MODO_letras
 
 	CPI MODE, 0b110
-	BREQ MODO_horario
+	BREQ MODO_alarma
 
-
+	MODO_alarma:
+		
+		CPI DPLY_ENCENDIDO, 0
+		BREQ Cargar_MinA_U
+		CPI DPLY_ENCENDIDO, 1
+		BREQ Cargar_MinA_D
+		CPI DPLY_ENCENDIDO, 2
+		BREQ Cargar_HoraA_U
+    
+		Cargar_HoraA_D:
+			LDS R16, VAR_ALARMA_HORAS_D
+			RJMP Dibujar_Numero
+		Cargar_HoraA_U:
+			LDS R16, VAR_ALARMA_HORAS_U 
+			RJMP Dibujar_Numero
+		Cargar_MinA_D:
+			LDS R16, VAR_ALARMA_MINUTOS_D 
+			RJMP Dibujar_Numero
+		Cargar_MinA_U:
+	    	LDS R16, VAR_ALARMA_MINUTOS_U 
+			RJMP Dibujar_Numero
+			
 
 	MODO_horario:
 
@@ -1235,41 +1560,39 @@ TIMER0_OVF:
             RJMP Dibujar_Numero
 
 	MODO_letras:
-		
-		CPI DPLY_ENCENDIDO, 0
+		LDS R16, VAR_ALARMA_ESTADO
+		CPI R16, 1
+		BREQ MODO_letras_ON
+
+	MODO_letras_OFF:
+		; Alarma apagada: Solo encender DPLY 3 (letra O) y DPLY 2 (letra F)
+		CPI DPLY_ENCENDIDO, 3
 		BREQ Cargar_O
-		CPI DPLY_ENCENDIDO, 1
-		BREQ Cargar_N
 		CPI DPLY_ENCENDIDO, 2
+		BREQ Cargar_F
+		RJMP Salir_Timer0      ; Si el barrido va en 0 o 1, salir dejando apagado
+
+	MODO_letras_ON:
+		; Alarma encendida: Solo encender DPLY 1 (letra O) y DPLY 0 (letra N)
+		CPI DPLY_ENCENDIDO, 1
 		BREQ Cargar_O
-		
+		CPI DPLY_ENCENDIDO, 0
+		BREQ Cargar_N
+		RJMP Salir_Timer0      ; Si el barrido va en 2 o 3, salir dejando apagado
+
 		Cargar_F:
-			LDI R16,2
-			LDI ZH, HIGH(dispON_OFF<<1)
-			LDI ZL, LOW(dispON_OFF<<1)
-			ADD ZL, R16
-			ADC ZH, R1              ; R1 es 0
-			LPM R17, Z
-			IN R16, PORTD          
-			ANDI R16, 0x80         
-			ANDI R17, 0x7F          
-			OR R17, R16             
-			OUT PORTD, R17
-			RJMP Activar_Transistor          
+			LDI R16, 2
+			RJMP Ejecutar_Letra
 
 		Cargar_O:
-			LDI ZH, HIGH(dispON_OFF<<1)
-			LDI ZL, LOW(dispON_OFF<<1)
-			LPM R17, Z
-			IN R16, PORTD          
-			ANDI R16, 0x80         
-			ANDI R17, 0x7F          
-			OR R17, R16             
-			OUT PORTD, R17 
-			RJMP Activar_Transistor
+			LDI R16, 0
+			RJMP Ejecutar_Letra
 
 		Cargar_N:
-			LDI R16,1
+			LDI R16, 1
+			RJMP Ejecutar_Letra
+
+		Ejecutar_Letra:
 			LDI ZH, HIGH(dispON_OFF<<1)
 			LDI ZL, LOW(dispON_OFF<<1)
 			ADD ZL, R16
@@ -1311,9 +1634,11 @@ TIMER0_OVF:
 
 	Salir_Timer0:
 		// Retornar Contexto
+		POP R18
 		POP R16
 		OUT SREG, R16
 		POP R17
 		POP R16
+
 		// Salir de Interrupcion
 		RETI
