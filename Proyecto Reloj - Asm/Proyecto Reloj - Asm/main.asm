@@ -25,6 +25,9 @@
 
 // --- Constantes ---
 .equ VELOCIDAD = 15625          // Valor para que el Timer1 cuente exactamente 1 segundo (con prescaler 1024)
+// 1SEGUNDO = 15625
+
+
 .equ MAX_MODES = 7              // Límite de modos del sistema (0 a 6)
 
 // --- Memoria RAM (Variables dinámicas) ---
