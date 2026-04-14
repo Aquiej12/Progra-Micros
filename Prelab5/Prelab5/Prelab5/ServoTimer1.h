@@ -2,13 +2,7 @@
  * ServoTimer1.h
  *
  * Librería para control de servo mediante Timer1 PWM (OC1A - PB1)
- * F_CPU = 16MHz, señal 50Hz (periodo 20ms)
- *
- * Cableado:
- *   PB1 (OC1A) -> Señal servo (cable amarillo/naranja)
- *   PC0 (ADC0) -> Terminal central del potenciómetro
- *   5V         -> VCC servo + terminal izquierdo potenciómetro
- *   GND        -> GND servo + terminal derecho potenciómetro
+
  */
 
 #ifndef SERVO_TIMER1_H_
@@ -24,9 +18,9 @@
  *   1ms = 2000 ticks
  *   2ms = 4000 ticks
  * --------------------------------------------------------------- */
-#define SERVO_MIN_TICKS    2000U
-#define SERVO_MAX_TICKS    4000U
-#define SERVO_RANGE_TICKS  (SERVO_MAX_TICKS - SERVO_MIN_TICKS)   /* 2000 */
+#define SERVO_MIN_TICKS   1000U   /* 0.5ms = 0°   */
+#define SERVO_MAX_TICKS   5000U   /* 2.5ms = 180° */
+#define SERVO_RANGE_TICKS 4000U
 
 #ifdef __cplusplus
 extern "C" {
