@@ -1,12 +1,5 @@
 /*
  * ServoTimer1B.h
- *
- * Segundo servo usando OC1B (PB2) — comparte Timer1 con ServoTimer1
- * Misma resolución: 1 tick = 0.5µs | 0.5ms–2.5ms = 1000–5000 ticks
- *
- * IMPORTANTE: Servo_Init() de ServoTimer1 debe llamarse primero,
- * ya que ella configura Timer1 (ICR1, TCCR1A/B).
- * Esta librería solo agrega COM1B1 y maneja OCR1B.
  */
 #ifndef SERVO_TIMER1B_H_
 #define SERVO_TIMER1B_H_
