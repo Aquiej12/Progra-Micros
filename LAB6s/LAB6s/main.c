@@ -1,10 +1,15 @@
 /*
- * LAB6s.c
+ * LAB6.c
  *
- * Created: 20/04/2026 13:38:45
- * Author : abner
+ * Created: 27/04/2026	
+ * Author: Abner Quiej	
+ * Description: 
  */
+/****************************************/
 
+// Encabezado (Libraries)
+
+/****************************************/
 #define F_CPU 16000000UL
 #define BAUD  9600
 #define UBRR_VAL (F_CPU/16/BAUD - 1)
@@ -12,12 +17,13 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-/****************************************/
-// Global
+
 volatile uint8_t modoASCII = 0;
 
 /****************************************/
+
 // Function prototypes
+
 void initUART();
 void initADC();
 uint16_t readADC();
@@ -29,7 +35,8 @@ void showMenu();
 void handleMenu(char opcion);
 
 /****************************************/
-// Main
+// Main Function
+
 int main(void)
 {
     cli();
@@ -43,7 +50,7 @@ int main(void)
 }
 
 /****************************************/
-// Subroutines
+// NON-Interrupt subroutines
 
 void initUART()
 {
@@ -139,9 +146,9 @@ void handleMenu(char opcion)
             break;
     }
 }
-
 /****************************************/
-// ISR
+
+// Interrupt routines
 ISR(USART_RX_vect)
 {
     char bufferRX = UDR0;
