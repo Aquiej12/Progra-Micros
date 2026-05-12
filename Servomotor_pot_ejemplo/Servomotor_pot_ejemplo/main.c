@@ -50,16 +50,32 @@
 #define HIP_CTR         90
 
 #define KB_S1           25
-#define KB_S2           35
+#define KB_S2           30
 #define KB_S3           25
-#define KB_S4           35
+#define KB_S4           25
 static const uint8_t KB[4] = { KB_S1, KB_S2, KB_S3, KB_S4 };
 
-#define KNEE_LIFT       40
+//levantar la rodilla
+#define KNEE_LIFT       45
+
+// estabilizacion de la rodilla
 #define KNEE_STAB       10
-#define HIP_SWING       40
-#define YAW_SWING       40
-#define HIP_PUSH        15
+
+// Estirar la pata hacia adelante (Avanza largo)
+#define HIP_SWING_FWD   45
+
+// Estirar la pata hacia atrás (Zancada corta para no chocar con el chasis)
+#define HIP_SWING_BWD   45
+
+//Zancada de giro
+#define YAW_SWING       45
+
+// Fuerza de empuje hacia atrás (Compensación de Drift)
+// Si se va a la derecha, le bajamos la fuerza a la izquierda (o viceversa)
+#define HIP_PUSH_L      15  // Pata izquierda empuja un poco menos
+#define HIP_PUSH_R      15  // Pata derecha empuja un poco más
+
+// Velocidad
 #define STEP_TICKS      5
 #define KNEE_MAX        90
 #define KNEE_OFF_MAX    35
@@ -190,35 +206,41 @@ static void execute_step(uint8_t leg, uint8_t step, int8_t dir,
         break;
 
     case 1: /* SWING */
-        if (turning) {
-            hip_pos[leg] = (uint8_t)clamp16(
-                (int16_t)HIP_CTR + dir * YAW_SWING, 10, 170);
-        } else {
-            hip_pos[leg] = (uint8_t)clamp16(
-                (int16_t)HIP_CTR + dir * HIP_SWING * side_mirror(leg),
-                10, 170);
-        }
-        set_servo(leg, hip_pos[leg]);
-        break;
+    if (turning) {
+	    hip_pos[leg] = (uint8_t)clamp16(
+	    (int16_t)HIP_CTR + dir * YAW_SWING, 10, 170);
+	    } else {
+	    // Elige la amplitud dependiendo si va adelante o atrás
+	    int16_t swing_val = (dir > 0) ? HIP_SWING_FWD : HIP_SWING_BWD;
+	    hip_pos[leg] = (uint8_t)clamp16(
+	    (int16_t)HIP_CTR + dir * swing_val * side_mirror(leg),
+	    10, 170);
+    }
+    set_servo(leg, hip_pos[leg]);
+    break;
 
     case 2: /* PLANT */
-        set_servo(leg + 4, kb[leg]);
-        set_servo(opp + 4, kb[opp]);
-        break;
+    set_servo(leg + 4, kb[leg]);
+    set_servo(opp + 4, kb[opp]);
+    break;
 
     case 3: /* PUSH */
-        for (i = 0; i < 4; i++) {
-            if (turning) {
-                hip_pos[i] = (uint8_t)clamp16(
-                    (int16_t)hip_pos[i] - dir * HIP_PUSH, 10, 170);
-            } else {
-                hip_pos[i] = (uint8_t)clamp16(
-                    (int16_t)hip_pos[i] - dir * HIP_PUSH * side_mirror(i),
-                    10, 170);
-            }
-            set_servo(i, hip_pos[i]);
-        }
-        break;
+    for (i = 0; i < 4; i++) {
+	    if (turning) {
+		    // Durante el giro, usa el empuje derecho por defecto (promedio)
+		    hip_pos[i] = (uint8_t)clamp16(
+		    (int16_t)hip_pos[i] - dir * HIP_PUSH_R, 10, 170);
+		    } else {
+		    // Aquí aplicamos la corrección de Drift: Left vs Right
+		    int16_t push_val = (i == 2 || i == 3) ? HIP_PUSH_L : HIP_PUSH_R; // S3,S4 son Izquierda
+		    
+		    hip_pos[i] = (uint8_t)clamp16(
+		    (int16_t)hip_pos[i] - dir * push_val * side_mirror(i),
+		    10, 170);
+	    }
+	    set_servo(i, hip_pos[i]);
+    }
+    break;
     }
 }
 
