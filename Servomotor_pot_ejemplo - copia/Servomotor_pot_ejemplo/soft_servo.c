@@ -54,8 +54,7 @@ void SoftServo_SetTicks(uint8_t canal, uint16_t ticks) {
     s_ticks[canal] = ticks;
 }
 
-/* ISR: solo genera PWM por software.
- * El frame_flag ahora lo maneja flexi_timer (Timer2). */
+// ISR optimizado: variable local estática (evita acceso global), puntero en registro
 ISR(TIMER1_COMPA_vect) {
     static uint16_t count = 0;
 
