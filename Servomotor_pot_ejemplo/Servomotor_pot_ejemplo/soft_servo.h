@@ -4,7 +4,7 @@
 #include <avr/io.h>
 #include <stdint.h>
 
-#define MAX_SOFT_SERVOS 6
+#define MAX_SOFT_SERVOS 8
 
 void SoftServo_Init(void);
 void SoftServo_Attach(uint8_t canal, volatile uint8_t *puerto, volatile uint8_t *ddr,
