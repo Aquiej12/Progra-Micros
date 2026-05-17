@@ -55,21 +55,21 @@
 #define HIP_CTR         90
 
 #define KB_S1           25
-#define KB_S2           20
+#define KB_S2           25
 #define KB_S3           25
 #define KB_S4           25
 static const uint8_t KB[4] = { KB_S1, KB_S2, KB_S3, KB_S4 };
 
-#define KNEE_LIFT       55
-#define KNEE_STAB       10
+#define KNEE_LIFT       30    /* cuanto sube la rodilla al levantar (suave) */
+#define KNEE_STAB       15    /* baja la rodilla opuesta para anclar el CoG */
 
-#define HIP_SWING_FWD   45
-#define HIP_SWING_BWD   35
+#define HIP_SWING_FWD   35    /* zancada adelante reducida (no resbala)     */
+#define HIP_SWING_BWD   15    /* zancada atras reducida (no se desparrama)  */
 
-#define YAW_SWING       45
+#define YAW_SWING       25    /* amplitud de giro reducida (estable)        */
 
-#define HIP_PUSH_L      20
-#define HIP_PUSH_R      15
+#define HIP_PUSH_L      15    /* empuje del cuerpo, lado izquierdo          */
+#define HIP_PUSH_R      15    /* empuje del cuerpo, lado derecho            */
 
 #define STEP_TICKS      5       /* duracion de cada sub-paso (5 × 10 ms) */
 #define KNEE_MAX        85      /* tope superior de la rodilla            */
@@ -202,6 +202,7 @@ static void go_stance(const uint8_t *kb) {
  * ═══════════════════════════════════════════════════════════════════ */
 static void rec_write_event(int8_t fb, int8_t lr, int8_t yw, uint16_t dur) {
     EEPROM_Macro_t ev;
+    if (datos_lora.mode == 1) return;   /* solo se bloquea en Reproduccion */
     ev.j_fb           = fb;
     ev.j_lr           = lr;
     ev.j_yaw          = yw;
@@ -212,6 +213,7 @@ static void rec_write_event(int8_t fb, int8_t lr, int8_t yw, uint16_t dur) {
 }
 
 static void rec_start(int8_t fb, int8_t lr, int8_t yw) {
+    if (datos_lora.mode == 1) return;   /* solo se bloquea en Reproduccion */
     rec_addr     = 0;
     rec_prev_fb  = fb;
     rec_prev_lr  = lr;
@@ -220,6 +222,7 @@ static void rec_start(int8_t fb, int8_t lr, int8_t yw) {
 }
 
 static void rec_tick(int8_t fb, int8_t lr, int8_t yw) {
+    if (datos_lora.mode == 1) return;   /* solo se bloquea en Reproduccion */
     if (fb != rec_prev_fb || lr != rec_prev_lr || yw != rec_prev_yw) {
         /* Cambio: guardar estado anterior + su duracion */
         if (rec_addr + EEPROM_EVT_SIZE <= EEPROM_DATA_MAX) {
@@ -235,6 +238,10 @@ static void rec_tick(int8_t fb, int8_t lr, int8_t yw) {
 }
 
 static void rec_stop(void) {
+    /* Agnostico al modo: solo se aborta si NO hay grabacion activa.
+     * Asi se garantiza que el EOF_MARK se escriba aunque la transicion
+     * de modo ya haya cambiado datos_lora.mode a 1 (Reproduccion).      */
+    if (rec_addr == 0) return;
     /* Guardar el ultimo estado todavia activo */
     if (rec_addr + EEPROM_EVT_SIZE <= EEPROM_DATA_MAX) {
         rec_write_event(rec_prev_fb, rec_prev_lr, rec_prev_yw, rec_duration);
@@ -450,27 +457,11 @@ int main(void) {
          *  ENTRADAS DE CONTROL segun el modo
          * ══════════════════════════════════════════════════════ */
         if (cur_mode == 0) {
-            /* ── MODE 0: MANUAL + posible REC ─── */
+            /* ── MODE 0: MANUAL ─── */
             fb = dz(datos_lora.fwd_bwd);
             lr = dz(datos_lora.left_right);
             yw = dz(datos_lora.yaw);
             ht =    datos_lora.height;
-
-            /* Estados simplificados para grabar */
-            s_fb = simplify(fb);
-            s_lr = simplify(lr);
-            s_yw = simplify(yw);
-
-            /* Maquina de grabacion */
-            if (cur_action == 1 && prev_action_btn == 0) {
-                rec_start(s_fb, s_lr, s_yw);
-            }
-            if (cur_action == 1) {
-                rec_tick(s_fb, s_lr, s_yw);
-            }
-            if (cur_action == 0 && prev_action_btn == 1) {
-                rec_stop();
-            }
         }
         else if (cur_mode == 1) {
             /* ── MODE 1: EEPROM PLAYBACK ─── */
@@ -481,9 +472,35 @@ int main(void) {
             ht = 0;          /* altura neutral */
         }
         else {
-            /* ── MODE 2: UART → STOP ─── */
+            /* ── MODE 2: UART → STOP movimiento (la grabacion sigue activa) ─── */
             fb = lr = yw = 0;
             ht = 0;
+        }
+
+        /* ════════════════════════════════════════════════════════
+         *  GRABACION EEPROM — activa en MODO 0 y MODO 2.
+         *  En modo 2 los joysticks no mueven al robot, pero igual
+         *  se pueden registrar para una macro futura.
+         *  En MODO 1 (Reproduccion) las funciones rec_write_event,
+         *  rec_start y rec_tick llevan guardia "if (datos_lora.mode
+         *  == 1) return;". rec_stop es agnostico al modo: solo aborta
+         *  si rec_addr == 0 (no hay grabacion activa) — asi puede
+         *  cerrar la macro aunque ya hayamos transicionado a modo 1.
+         * ══════════════════════════════════════════════════════ */
+        if (cur_mode == 0 || cur_mode == 2) {
+            s_fb = simplify(dz(datos_lora.fwd_bwd));
+            s_lr = simplify(dz(datos_lora.left_right));
+            s_yw = simplify(dz(datos_lora.yaw));
+
+            if (cur_action == 1 && prev_action_btn == 0) {
+                rec_start(s_fb, s_lr, s_yw);
+            }
+            if (cur_action == 1) {
+                rec_tick(s_fb, s_lr, s_yw);
+            }
+            if (cur_action == 0 && prev_action_btn == 1) {
+                rec_stop();
+            }
         }
 
         prev_action_btn = cur_action;
