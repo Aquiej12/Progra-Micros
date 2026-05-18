@@ -3,7 +3,7 @@
  *
  * Created: 
  * Author: 
- * Description: Driver para modulo LoRA SX1276 
+ * Description: Driver SX1276 minimo (LoRa, RX continuo + TX bloqueante)
  */
 
  

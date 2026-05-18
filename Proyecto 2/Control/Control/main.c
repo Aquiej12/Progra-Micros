@@ -361,12 +361,13 @@ int main(void) {
         // 5) TRANSICION DE MODO — cerrar grabacion / abrir playback
         
         if (mode != prev_mode_internal) {
+            /* Si veniamos grabando en cualquier modo no-1, cerrar la macro */
             if (prev_mode_internal != 1 && prev_action_btn == 1) {
                 rec_stop();
             }
             if (mode == 1) pb_init();
             if (mode == 2) {
-                
+                /* Al entrar a UART, resetear el estado de comandos */
                 uart_fb = uart_lr = uart_yw = 0;
             }
             prev_mode_internal = mode;
@@ -375,7 +376,7 @@ int main(void) {
         // 6) LECTURA SEGUN MODO — arma el Payload_t para LoRa
         
         if (mode == 0) {
-            // MODO 0: MANUAL (joysticks) 
+            /* ─── MODO 0: MANUAL (joysticks) ─── */
             raw0 = (int16_t)ADC_Read(0) - (int16_t)joy_center[0];
             raw1 = (int16_t)ADC_Read(1) - (int16_t)joy_center[1];
             raw2 = (int16_t)ADC_Read(2) - (int16_t)joy_center[2];
@@ -414,7 +415,7 @@ int main(void) {
         }
         else {
 
-            // MODO 2: UART 
+            // ─── MODO 2: UART 
             
             if (UART_Available()) {
                 uart_cmd = UART_Read();
@@ -434,7 +435,8 @@ int main(void) {
                     case 'S': case 's':
                         uart_fb = uart_lr = uart_yw = 0; break;
                     case 'C': case 'c':
-                        
+                        /* Toggle del action_btn → detona la grabacion
+                         * en EEPROM con la misma logica del boton fisico */
                         datos_lora.action_btn =
                             (uint8_t)(!datos_lora.action_btn);
                         break;
