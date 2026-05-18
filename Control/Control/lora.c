@@ -1,38 +1,38 @@
-/*  lora.c — Driver SX1276 minimo (LoRa, RX continuo + TX bloqueante)
+/*
+ * lora.c
  *
- *  ╔══════════════════════════════════════════════════════════════════╗
- *  ║ ESTA ES LA VERSION DEL CONTROL (TX).                            ║
- *  ║ Pines RST y DIO0 difieren respecto al ROBOT (RX).               ║
- *  ║ Si copias este archivo al proyecto Robot, cambia el bloque      ║
- *  ║ "Pin map" para que use:                                          ║
- *  ║    RST  = PC0 (A0)                                               ║
- *  ║    DIO0 = PC1 (A1)                                               ║
- *  ╚══════════════════════════════════════════════════════════════════╝
+ * Created: Guatemala 17/05/2026
+ * Author: Abner Quiej
+ * Description: Libreria para el control de un modulo LoRa SX1276  
+ *              Esta es la version solo para control (TX)
  */
+
+/****************************************/
+// Encabezado (Libraries)
+/****************************************/
+
 #define F_CPU 16000000UL
 #include "lora.h"
 #include "spi.h"
 #include <avr/io.h>
 #include <util/delay.h>
 
-/* ════════════════════════════════════════════════════════════════════
- *  Pin map  — CONTROL (TX)
- * ═══════════════════════════════════════════════════════════════════ */
+//  Pin map  — CONTROL (TX)
+
 #define NSS_PORT   PORTB
 #define NSS_DDR    DDRB
-#define NSS_BIT    PB2          /* D10 — comun a ambos proyectos */
+#define NSS_BIT    PB2         
 
 #define RST_PORT   PORTB
 #define RST_DDR    DDRB
-#define RST_BIT    PB1          /* D9 — Control */
+#define RST_BIT    PB1          
 
 #define DIO0_DDR   DDRB
 #define DIO0_PIN   PINB
-#define DIO0_BIT   PB0          /* D8 — Control */
+#define DIO0_BIT   PB0          
 
-/* ════════════════════════════════════════════════════════════════════
- *  Registros SX1276 (modo LoRa)
- * ═══════════════════════════════════════════════════════════════════ */
+// Registros SX1276 (modulo LoRa)
+
 #define REG_FIFO                  0x00
 #define REG_OP_MODE               0x01
 #define REG_FRF_MSB               0x06
@@ -50,29 +50,34 @@
 #define REG_MODEM_CONFIG_3        0x26
 #define REG_VERSION               0x42
 
-/* ── Modos (REG_OP_MODE) ──────────────────────────────────────────── */
-#define MODE_LONG_RANGE_MODE  0x80      /* bit LoRa */
+// Modos (REG_OP_MODE) 
+#define MODE_LONG_RANGE_MODE  0x80      
 #define MODE_SLEEP            0x00
 #define MODE_STDBY            0x01
 #define MODE_TX               0x03
 #define MODE_RX_CONTINUOUS    0x05
 
-/* ── PA Config ────────────────────────────────────────────────────── */
+// PA Config 
 #define PA_BOOST              0x80
 
-/* ── IRQ flags ────────────────────────────────────────────────────── */
+// IRQ flags 
 #define IRQ_TX_DONE_MASK         0x08
 #define IRQ_PAYLOAD_CRC_ERROR    0x20
 #define IRQ_RX_DONE_MASK         0x40
 
-/* ── Estado ───────────────────────────────────────────────────────── */
+
+/****************************************/
+// Function prototypes
+/****************************************/
+
+// Estado 
 static uint8_t packet_size = 0;
 
-/* ── NSS helpers ─────────────────────────────────────────────────── */
+// NSS helpers
 static void lora_select(void)   { NSS_PORT &= ~(1 << NSS_BIT); }
 static void lora_deselect(void) { NSS_PORT |=  (1 << NSS_BIT); }
 
-/* ── Lectura/escritura de registros ───────────────────────────────── */
+// Lectura/escritura de registros 
 static uint8_t lora_read(uint8_t addr) {
     uint8_t val;
     lora_select();
@@ -89,21 +94,24 @@ static void lora_write(uint8_t addr, uint8_t value) {
     lora_deselect();
 }
 
-/* ════════════════════════════════════════════════════════════════════
- *  Init
- * ═══════════════════════════════════════════════════════════════════ */
+/****************************************/
+// Main Function
+/****************************************/
+
+// Init
+
 uint8_t LoRa_Init(uint32_t frequency) {
     uint64_t frf;
     uint8_t  version;
 
-    /* Pines de control */
+    // Pines de control 
     NSS_DDR  |=  (1 << NSS_BIT);
     RST_DDR  |=  (1 << RST_BIT);
     DIO0_DDR &= ~(1 << DIO0_BIT);
 
     lora_deselect();
 
-    /* Reset: LOW 10ms → HIGH 10ms */
+    // Reset: LOW 10ms → HIGH 10ms
     RST_PORT &= ~(1 << RST_BIT);
     _delay_ms(10);
     RST_PORT |=  (1 << RST_BIT);
@@ -111,17 +119,17 @@ uint8_t LoRa_Init(uint32_t frequency) {
 
     SPI_Init();
 
-    /* ── Prueba SPI: REG_VERSION debe leer 0x12 ─────────────────── */
+    // Prueba SPI: REG_VERSION debe leer 0x12
     version = lora_read(REG_VERSION);
     if (version != 0x12) {
         return 1;                  /* fallo de hardware/SPI */
     }
 
-    /* SLEEP + LongRange (el bit LR solo se cambia en sleep) */
+    // SLEEP + LongRange (el bit LR solo se cambia en sleep) 
     lora_write(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_SLEEP);
     _delay_ms(10);
 
-    /* Frecuencia: FRF = (freq << 19) / 32 MHz */
+    // Frecuencia: FRF = (freq << 19) / 32 MHz
     frf = ((uint64_t)frequency << 19) / 32000000UL;
     lora_write(REG_FRF_MSB, (uint8_t)(frf >> 16));
     lora_write(REG_FRF_MID, (uint8_t)(frf >> 8));
@@ -130,30 +138,30 @@ uint8_t LoRa_Init(uint32_t frequency) {
     lora_write(REG_FIFO_TX_BASE_ADDR, 0x00);
     lora_write(REG_FIFO_RX_BASE_ADDR, 0x00);
 
-    /* LNA boost ON */
+    // LNA boost ON 
     lora_write(REG_LNA, lora_read(REG_LNA) | 0x03);
 
-    /* AGC automatico */
+    // AGC automatico 
     lora_write(REG_MODEM_CONFIG_3, 0x04);
 
-    /* Potencia TX = 17 dBm via PA_BOOST */
+    // Potencia TX = 17 dBm via PA_BOOST 
     lora_write(REG_PA_CONFIG, PA_BOOST | (17 - 2));
 
-    /* Standby antes de RX */
+    // Standby antes de RX 
     lora_write(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_STDBY);
 
-    /* Recepcion continua */
+    // Recepcion continua 
     lora_write(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_RX_CONTINUOUS);
 
-    return 0;                      /* OK */
+    return 0;                      
 }
 
-/* ════════════════════════════════════════════════════════════════════
- *  ParsePacket — chequea IRQ y devuelve tamanio (0 si no hay)
- * ═══════════════════════════════════════════════════════════════════ */
+
+// ParsePacket — chequea IRQ y devuelve tamanio (0 si no hay)
+
 uint8_t LoRa_ParsePacket(void) {
     uint8_t irq = lora_read(REG_IRQ_FLAGS);
-    lora_write(REG_IRQ_FLAGS, irq);   /* limpiar flags */
+    lora_write(REG_IRQ_FLAGS, irq);  
 
     if ((irq & IRQ_RX_DONE_MASK) && !(irq & IRQ_PAYLOAD_CRC_ERROR)) {
         packet_size = lora_read(REG_RX_NB_BYTES);
@@ -163,9 +171,9 @@ uint8_t LoRa_ParsePacket(void) {
     return 0;
 }
 
-/* ════════════════════════════════════════════════════════════════════
- *  ReadBytes — drena el FIFO en una sola transaccion SPI
- * ═══════════════════════════════════════════════════════════════════ */
+
+// ReadBytes — drena el FIFO en una sola transaccion SPI
+ 
 void LoRa_ReadBytes(uint8_t *buffer, uint8_t size) {
     uint8_t i;
     lora_select();
@@ -176,32 +184,20 @@ void LoRa_ReadBytes(uint8_t *buffer, uint8_t size) {
     lora_deselect();
 }
 
-/* ════════════════════════════════════════════════════════════════════
- *  Transmit — envio bloqueante de N bytes
- *
- *  Secuencia:
- *    1. STDBY
- *    2. FIFO_ADDR_PTR = TX_BASE (0)
- *    3. Escribir payload al FIFO
- *    4. PAYLOAD_LENGTH = size
- *    5. Modo TX → arranca transmision
- *    6. Esperar DIO0 = HIGH (TxDone)
- *    7. Limpiar IRQ_TX_DONE
- *    8. Volver a STDBY
- *
- *  Devuelve el numero de bytes enviados.
- * ═══════════════════════════════════════════════════════════════════ */
+
+// Devuelve el numero de bytes enviados.
+
 uint8_t LoRa_Transmit(uint8_t *buffer, uint8_t size) {
     uint8_t  i;
-    uint16_t timeout_ms = 100;     /* 100 ms maximo de espera TxDone */
+    uint16_t timeout_ms = 100;     
 
-    /* 1. STDBY */
+    // 1. STDBY
     lora_write(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_STDBY);
 
-    /* 2. Apuntar FIFO al inicio del area TX */
+    // 2. Apuntar FIFO al inicio del area TX
     lora_write(REG_FIFO_ADDR_PTR, 0x00);
 
-    /* 3. Cargar payload en el FIFO (una sola transaccion SPI) */
+    // 3. Cargar payload en el FIFO (una sola transaccion SPI) 
     lora_select();
     SPI_Transfer(REG_FIFO | 0x80);
     for (i = 0; i < size; i++) {
@@ -209,35 +205,35 @@ uint8_t LoRa_Transmit(uint8_t *buffer, uint8_t size) {
     }
     lora_deselect();
 
-    /* 4. Tamanio del payload */
+    // 4. Tamanio del payload 
     lora_write(REG_PAYLOAD_LENGTH, size);
 
-    /* 4b. Mapear DIO0 → TxDone (sin esto DIO0 nunca sube en TX) */
-    lora_write(0x40, 0x40);                    /* REG_DIO_MAPPING_1   */
+    // 4b. Mapear DIO0 a TxDone (sin esto DIO0 nunca sube en TX) 
+    lora_write(0x40, 0x40);                    
 
-    /* 5. Disparar transmision */
+    // 5. Disparar transmision
     lora_write(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_TX);
 
-    /* 6. Esperar TxDone con TIMEOUT (antes era bucle infinito) */
+    // 6. Esperar TxDone con TIMEOUT 
     while (!(DIO0_PIN & (1 << DIO0_BIT))) {
         if (timeout_ms == 0) {
-            /* TIMEOUT — abortar limpiamente */
-            lora_write(REG_IRQ_FLAGS, 0xFF);          /* limpia todas */
+            // TIMEOUT — abortar limpiamente
+            lora_write(REG_IRQ_FLAGS, 0xFF);          
             lora_write(REG_OP_MODE,
                        MODE_LONG_RANGE_MODE | MODE_STDBY);
-            return 0;                                  /* error */
+            return 0;                                 
         }
         _delay_ms(1);
         timeout_ms--;
     }
 
-    /* 7. Limpiar bandera IRQ_TX_DONE */
+    // 7. Limpiar bandera IRQ_TX_DONE
     lora_write(REG_IRQ_FLAGS, IRQ_TX_DONE_MASK);
 
-    /* 7b. Restaurar DIO0 → RxDone (por seguridad) */
-    lora_write(0x40, 0x00);                    /* REG_DIO_MAPPING_1   */
+    // 7b. Restaurar DIO0 → RxDone (por seguridad) 
+    lora_write(0x40, 0x00);                    
 
-    /* 8. Volver a STDBY */
+    // 8. Volver a STDBY 
     lora_write(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_STDBY);
 
     return size;

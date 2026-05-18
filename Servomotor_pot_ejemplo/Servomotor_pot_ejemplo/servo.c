@@ -1,9 +1,27 @@
+/*
+ * NombreProgra.c
+ *
+ * Created: 
+ * Author: 
+ * Description: 
+ */
+
+
+/****************************************/
+// Encabezado (Libraries)
+/****************************************/
 #include "servo.h"
 
 static uint8_t  s_min_ocr[4];
 static uint8_t  s_max_ocr[4];
 static uint16_t s_min_adc[4];
 static uint16_t s_max_adc[4];
+
+
+/****************************************/
+// Function prototypes
+/****************************************/
+
 
 void Servo_Init(uint8_t canal, uint16_t prescaler, uint8_t min_ocr, uint8_t max_ocr,
                 uint16_t min_adc, uint16_t max_adc) {

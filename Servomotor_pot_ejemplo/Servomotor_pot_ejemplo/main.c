@@ -1,45 +1,21 @@
-/* ════════════════════════════════════════════════════════════════════
- *  main.c — Robot cuadrupedo (RX, "ejecutor tonto")
+/*
+ * main.c
  *
- *  Filosofia: este micro NO toma decisiones. Solo:
- *     1) Recibe Payload_t por LoRa
- *     2) Aplica fb / lr / yw / height a la cinematica de marcha
- *     3) Watchdog para parar si pierde la senal
- *
- *  Toda la inteligencia (modos, EEPROM, UART, joysticks) vive en el
- *  control (TX). El robot no diferencia entre modo Manual, EEPROM o
- *  UART: para el todo es la misma fuente de datos.
- *
- *  ATmega328P @ 16 MHz, C puro, Microchip Studio.
- *
- *  ── Pin map (FRENTE VIRTUAL) ─────────────────────────────────────
- *  SERVOS (Soft PWM, Timer1 ISR, 8 canales):
- *    S1 (FL — Frente Izquierda):
- *      ch1 SW_HIP_S1  → D3 PD3       ch0 SW_KNEE_S1 → D2 PD2
- *    S2 (FR — Frente Derecha):
- *      ch2 SW_HIP_S2  → D8 PB0       ch3 SW_KNEE_S2 → D9 PB1
- *    S3 (RR — Atras Derecha):
- *      ch4 SW_HIP_S3  → D7 PD7       ch5 SW_KNEE_S3 → D6 PD6
- *    S4 (RL — Atras Izquierda):
- *      ch6 SW_HIP_S4  → D5 PD5       ch7 SW_KNEE_S4 → D4 PD4
- *
- *  LoRa SX1276 (915 MHz):
- *    MOSI = D11 PB3    NSS  = D10 PB2
- *    MISO = D12 PB4    RST  = A0  PC0
- *    SCK  = D13 PB5    DIO0 = A1  PC1
- *
- *  UART (solo para debug de salida):
- *    TX = PD1, RX = PD0 (RX queda sin uso real)
- *
- *  Layout fisico:
- *           FRENTE
- *    S1(FL)       S2(FR)
- *    [  cuerpo  ]
- *    S4(RL)       S3(RR)
- *           ATRAS
- *
- *  Lados:  IZQUIERDA = S1, S4   |   DERECHA = S2, S3
- * ═══════════════════════════════════════════════════════════════════ */
+ * Created: 17/05/2026
+ * Author: Abner Quiej (El Terricola mas Guapo del sistema Solar)
+ * Description: Robot cuadrupedo
+ *              este micro NO toma decisiones. Solo:
+ *              1) Recibe Payload_t por LoRa
+ *              2) Aplica fb / lr / yw / height a la cinematica de marcha
+ *              3) Watchdog para parar si pierde la senal
+ *              Toda la inteligencia (modos, EEPROM, UART, joysticks) vive en el
+ *              control (TX). El robot no diferencia entre modo Manual, EEPROM o
+ *              UART: para el todo es la misma fuente de datos.
+ */
+
+
+/****************************************/
+// Encabezado (Libraries)
 
 #define F_CPU 16000000UL
 #include <avr/io.h>
@@ -51,7 +27,7 @@
 #include "lora.h"
 #include "uart.h"
 
-/* Indices de canales soft servo */
+// Indices de canales soft servo
 #define SW_KNEE_S1  0
 #define SW_HIP_S1   1
 #define SW_HIP_S2   2
@@ -61,54 +37,39 @@
 #define SW_HIP_S4   6
 #define SW_KNEE_S4  7
 
-/* ════════════════════════════════════════════════════════════════════
- *  POSTURA Y CINEMATICA
- * ═══════════════════════════════════════════════════════════════════ */
+// POSTURA Y CINEMATICA
+// Postura inicial
 #define HIP_CTR         90
-
 #define KB_S1           25
 #define KB_S2           25
 #define KB_S3           25
 #define KB_S4           25
 static const uint8_t KB[4] = { KB_S1, KB_S2, KB_S3, KB_S4 };
 
-#define KNEE_LIFT       30      /* cuanto sube la rodilla al levantar    */
-#define KNEE_STAB       15      /* baja la opuesta para anclar el CoG    */
+// Parametros de movimiento
+#define KNEE_LIFT       30      // cuanto sube la rodilla al levantar    
+#define KNEE_STAB       15      // baja la opuesta para anclar
 
-#define HIP_SWING_FWD   15      /* zancada adelante                       */
-#define HIP_SWING_BWD   15      /* zancada atras                          */
-#define YAW_SWING       15      /* amplitud de giro                       */
+#define HIP_SWING_FWD   15      // zancada adelante                       
+#define HIP_SWING_BWD   15      // zancada atras                          
+#define YAW_SWING       15      // amplitud de giro                       
 
-#define HIP_PUSH_L      10      /* empuje del cuerpo, lado izquierdo      */
-#define HIP_PUSH_R      10      /* empuje del cuerpo, lado derecho        */
+#define HIP_PUSH_L      10      // empuje del cuerpo, lado izquierdo      
+#define HIP_PUSH_R      10      // empuje del cuerpo, lado derecho        
 
-#define STEP_TICKS      5       /* duracion de cada sub-paso (5 × 10 ms) */
-#define KNEE_MAX        85      /* tope superior de la rodilla            */
+#define STEP_TICKS      5       // duracion de cada sub-paso (5 × 10 ms) 
+#define KNEE_MAX        85      // tope superior de la rodilla    
 
-/* ── TOPE VIRTUAL DE ALTURA (anti-brownout) ─────────────────────────
- *  KNEE_OFF_MAX y KNEE_FLOOR juntos garantizan que la rodilla JAMAS
- *  llegue al limite fisico del suelo (que causaba que el servo
- *  empujara contra el piso → sobrecorriente → reinicio del robot).
- *
- *  KNEE_OFF_MAX: cuanto puede mover el offset (mas conservador).
- *  KNEE_FLOOR:   minimo absoluto del angulo de rodilla (piso seguro).
- *
- *  Con KB[i]=25 y KNEE_OFF_MAX=15:
- *    minimo posible kb[i] = 25 - 15 = 10 → clamped a KNEE_FLOOR=15
- *  El servo nunca recibe < 15° aunque el joystick este al maximo abajo.
- * ──────────────────────────────────────────────────────────────── */
-#define KNEE_OFF_MAX    15      /* (antes 35) — limite mas restrictivo */
-#define KNEE_FLOOR      15      /* piso absoluto: la rodilla no baja de aqui */
+// TOPE VIRTUAL DE ALTURA (anti-brownout)
+#define KNEE_OFF_MAX    15      
+#define KNEE_FLOOR      15      
 
-#define DEADZONE        50      /* zona muerta del joystick               */
+// zona muerta del joystick
+#define DEADZONE        50                   
 
-/* ════════════════════════════════════════════════════════════════════
- *  LoRa — Payload (10 bytes) y watchdog
- *
- *  El robot ignora mode y action_btn — solo le importan los 4 ejes.
- *  Los campos quedan en el struct para mantener compatibilidad de
- *  tamanio con el control.
- * ═══════════════════════════════════════════════════════════════════ */
+
+// LoRa — Payload (10 bytes) y watchdog
+
 typedef struct {
     int16_t fwd_bwd;
     int16_t left_right;
@@ -119,19 +80,19 @@ typedef struct {
 } Payload_t;
 
 #define LORA_FREQ       915000000UL
-#define LORA_TIMEOUT    50      /* 50 × 10 ms = 500 ms sin senal → STOP */
+#define LORA_TIMEOUT    50      
 
 static Payload_t datos_lora    = { 0, 0, 0, 0, 0, 0 };
 static uint8_t   lora_watchdog = LORA_TIMEOUT;
 
-/* ════════════════════════════════════════════════════════════════════
- *  TABLAS Y ESTADO DE LA FSM
- * ═══════════════════════════════════════════════════════════════════ */
+
+//TABLAS Y ESTADO DE LA FSM
+
 static const uint8_t SEQ[4] = { 0, 2, 1, 3 };
 static const uint8_t OPP[4] = { 2, 3, 0, 1 };
 
-/* S1(0)=FL y S4(3)=RL → IZQUIERDA = +1
- * S2(1)=FR y S3(2)=RR → DERECHA  = -1                                */
+// S1(0)=FL y S4(3)=RL → IZQUIERDA = +1
+// S2(1)=FR y S3(2)=RR → DERECHA  = -1                             
 static int8_t side_mirror(uint8_t leg) {
     return (leg == 0 || leg == 3) ? 1 : -1;
 }
@@ -142,6 +103,7 @@ static int16_t  smooth_knee_off = 0;
 
 typedef enum { IDLE, SEQ_WAIT } GaitState;
 
+// Valores inicales
 static GaitState state      = IDLE;
 static uint8_t   seq_leg    = 0;
 static uint8_t   seq_step   = 0;
@@ -151,9 +113,8 @@ static int8_t    direction  = 0;
 static volatile uint8_t frame_flag = 0;
 static void frame_tick(void) { frame_flag = 1; }
 
-/* ════════════════════════════════════════════════════════════════════
- *  HELPERS
- * ═══════════════════════════════════════════════════════════════════ */
+// HELPERS
+
 static int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
@@ -164,7 +125,13 @@ static int16_t dz(int16_t v) {
 
 static int16_t abs16(int16_t v) { return (v < 0) ? -v : v; }
 
-/* Dispatch: idx 0..3 = caderas, idx 4..7 = rodillas */
+
+
+/****************************************/
+// Function prototypes
+/****************************************/
+
+// Ajustar Servomotores a los angulos
 static void set_servo(uint8_t idx, uint8_t deg) {
     switch (idx) {
         case 0: SoftServo_SetAngle(SW_HIP_S1,  deg); break;
@@ -178,6 +145,7 @@ static void set_servo(uint8_t idx, uint8_t deg) {
     }
 }
 
+// cambio de posición
 static void go_stance(const uint8_t *kb) {
     uint8_t i;
     for (i = 0; i < 4; i++) {
@@ -187,9 +155,8 @@ static void go_stance(const uint8_t *kb) {
     }
 }
 
-/* ════════════════════════════════════════════════════════════════════
- *  SECUENCIADOR FSM — Avance / Retroceso / Giro (diagonales)
- * ═══════════════════════════════════════════════════════════════════ */
+//SECUENCIADOR FSM — Avance / Retroceso / Giro (diagonales)
+
 static void execute_step(uint8_t logical_leg, uint8_t step, int8_t dir,
                          uint8_t turning, const uint8_t *kb)
 {
@@ -201,14 +168,14 @@ static void execute_step(uint8_t logical_leg, uint8_t step, int8_t dir,
 
     switch (step) {
 
-    case 0: /* LIFT */
+    case 0: // LIFT
         set_servo(leg + 4, (uint8_t)clamp16(
             (int16_t)kb[leg] + KNEE_LIFT, 0, KNEE_MAX));
         set_servo(opp + 4, (uint8_t)clamp16(
             (int16_t)kb[opp] - KNEE_STAB, 0, KNEE_MAX));
         break;
 
-    case 1: /* SWING */
+    case 1: // SWING 
         if (turning) {
             hip_pos[leg] = (uint8_t)clamp16(
                 (int16_t)HIP_CTR + dir * YAW_SWING, 10, 170);
@@ -221,12 +188,12 @@ static void execute_step(uint8_t logical_leg, uint8_t step, int8_t dir,
         set_servo(leg, hip_pos[leg]);
         break;
 
-    case 2: /* PLANT */
+    case 2: // PLANT
         set_servo(leg + 4, kb[leg]);
         set_servo(opp + 4, kb[opp]);
         break;
 
-    case 3: /* PUSH */
+    case 3: // PUSH
         for (i = 0; i < 4; i++) {
             if (turning) {
                 hip_pos[i] = (uint8_t)clamp16(
@@ -243,9 +210,8 @@ static void execute_step(uint8_t logical_leg, uint8_t step, int8_t dir,
     }
 }
 
-/* ════════════════════════════════════════════════════════════════════
- *  SECUENCIADOR DE STRAFE (movimiento lateral por pares laterales)
- * ═══════════════════════════════════════════════════════════════════ */
+// SECUENCIADOR DE STRAFE (movimiento lateral por pares laterales)
+
 static void execute_step_strafe(uint8_t par, uint8_t step, int8_t dir,
                                 const uint8_t *kb)
 {
@@ -255,11 +221,11 @@ static void execute_step_strafe(uint8_t par, uint8_t step, int8_t dir,
     int16_t swing_val;
 
     if (par == 0) {
-        /* Par L: S1 (idx 0) + S4 (idx 3) */
+        // Par L: S1 (idx 0) + S4 (idx 3)
         leg_a = 0; leg_b = 3;
         opp_a = 1; opp_b = 2;
     } else {
-        /* Par R: S2 (idx 1) + S3 (idx 2) */
+        // Par R: S2 (idx 1) + S3 (idx 2)
         leg_a = 1; leg_b = 2;
         opp_a = 0; opp_b = 3;
     }
@@ -301,9 +267,10 @@ static void execute_step_strafe(uint8_t par, uint8_t step, int8_t dir,
     }
 }
 
-/* ════════════════════════════════════════════════════════════════════
- *  MAIN
- * ═══════════════════════════════════════════════════════════════════ */
+
+/****************************************/
+// Main Function
+
 int main(void) {
     uint8_t  i;
     int16_t  fb, lr, yw, ht;
@@ -316,15 +283,15 @@ int main(void) {
     uint8_t  lora_status;
     uint8_t  print_throttle = 0;
 
-    /* ── UART debug 9600 baud ────────────────────────────────────── */
+    // UART debug 9600 baud
     UART_Init(9600);
     UART_PrintString("\r\n--- INICIANDO ROBOT RX ---\r\n");
 
-    /* ── LED de Enlace LoRa: PC2 (A2) como salida, inicia apagado ─── */
+    // LED de Enlace LoRa: PC2 (A2) como salida, inicia apagado 
     DDRC  |=  (1 << PC2);
     PORTC &= ~(1 << PC2);
 
-    /* ── LoRa primero (con bateria fresca) ───────────────────────── */
+    // Iniciar LoRa 
     lora_status = LoRa_Init(LORA_FREQ);
     if (lora_status != 0) {
         UART_PrintString("ERROR: Fallo comunicacion SPI LoRa\r\n");
@@ -332,7 +299,7 @@ int main(void) {
         UART_PrintString("LoRa OK (RX continuo)\r\n");
     }
 
-    /* ── Servos (todos juntos, sin esperas) ──────────────────────── */
+    // Iniciar Servomotores 
     SoftServo_Init();
     SoftServo_Attach(SW_HIP_S1,  &PORTD, &DDRD, PD3, 30, 120, 4, 962);
     SoftServo_Attach(SW_KNEE_S1, &PORTD, &DDRD, PD2, 30, 120, 4, 962);
@@ -343,28 +310,28 @@ int main(void) {
     SoftServo_Attach(SW_HIP_S4,  &PORTD, &DDRD, PD5, 30, 120, 4, 962);
     SoftServo_Attach(SW_KNEE_S4, &PORTD, &DDRD, PD4, 30, 120, 4, 962);
 
-    /* ── Timers + interrupciones ─────────────────────────────────── */
+    // Iniciar Timers + interrupciones
     FlexiTimer_Set(10, frame_tick);
     FlexiTimer_Start();
     sei();
 
-    /* ── Postura inicial ─────────────────────────────────────────── */
+    // Ajustar a  Postura inicial 
     go_stance(KB);
     _delay_ms(500);
 
     while (1) {
 
-        /* ── 1) Chequeo LoRa no bloqueante ──────────────────────── */
+        // 1) Chequeo LoRa 
         if (PINC & (1 << PC1)) {
             packet_size = LoRa_ParsePacket();
             if (packet_size == sizeof(Payload_t)) {
                 LoRa_ReadBytes((uint8_t *)&datos_lora, sizeof(Payload_t));
                 lora_watchdog = 0;
 
-                /* LED de Enlace LoRa ON: paquete valido recibido */
+                // LED de Enlace LoRa ON: paquete valido recibido
                 PORTC |= (1 << PC2);
 
-                /* Debug: 1 print de cada 5 paquetes */
+                // Debug: 1 print de cada 5 paquetes 
                 print_throttle++;
                 if (print_throttle >= 5) {
                     print_throttle = 0;
@@ -379,11 +346,11 @@ int main(void) {
             }
         }
 
-        /* ── 2) Esperar tick de 10 ms ───────────────────────────── */
+        // 2) Esperar tick de 10 ms 
         if (!frame_flag) continue;
         frame_flag = 0;
 
-        /* ── 3) Watchdog: si no llegan paquetes, parar movimiento ── */
+        // 3) Watchdog: si no llegan paquetes, parar movimiento
         if (lora_watchdog < LORA_TIMEOUT) {
             lora_watchdog++;
         } else {
@@ -391,17 +358,17 @@ int main(void) {
             datos_lora.left_right = 0;
             datos_lora.yaw        = 0;
 
-            /* LED de Enlace LoRa OFF: se perdio el enlace */
+            // LED de Enlace LoRa OFF: se perdio el enlace 
             PORTC &= ~(1 << PC2);
         }
 
-        /* ── 4) Leer ejes del Payload (sin distinguir modos) ────── */
+        // 4) Leer ejes del Payload 
         fb = dz(datos_lora.fwd_bwd);
         lr = dz(datos_lora.left_right);
         yw = dz(datos_lora.yaw);
         ht =    datos_lora.height;
 
-        /* ── 5) Prioridad: Avance > Strafe > Giro ────────────────── */
+        // 5) Prioridad: Avance > Strafe > Giro 
         new_dir    = 0;
         is_turning = 0;
         is_strafe  = 0;
@@ -419,14 +386,7 @@ int main(void) {
             is_turning = 1;
         }
 
-        /* ── 6) Altura: mapea height (±512) a offset de rodilla ──
-         *
-         *  Doble proteccion contra brownout:
-         *    target_knee_off acotado a ±KNEE_OFF_MAX (15° max abajo).
-         *    kb[i] final acotado a [KNEE_FLOOR, KNEE_MAX] → la rodilla
-         *      NUNCA recibe un angulo menor a 15°, incluso si las bases
-         *      KB[i] fueran muy chicas o si el filtro fallara.
-         */
+        // 6) Altura: mapea height  a offset de rodilla 
         target_knee_off = clamp16((int16_t)((int32_t)ht * 65 / 512),
                                   -KNEE_OFF_MAX, KNEE_OFF_MAX);
         smooth_knee_off = target_knee_off;
@@ -436,7 +396,7 @@ int main(void) {
                 (int16_t)KB[i] + smooth_knee_off, KNEE_FLOOR, KNEE_MAX);
         }
 
-        /* ── 7) FSM de marcha ────────────────────────────────────── */
+        // 7) FSM de marcha 
         switch (state) {
 
         case IDLE:
@@ -487,3 +447,4 @@ int main(void) {
 
     return 0;
 }
+

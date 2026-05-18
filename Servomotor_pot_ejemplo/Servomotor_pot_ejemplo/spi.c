@@ -1,9 +1,20 @@
-/*  spi.c — Driver SPI Maestro a fosc/16 (1 MHz @ 16 MHz)
- *  Mas lento que fosc/4 pero mas robusto sobre cables largos / breadboard.
+/*
+ * spi.c
+ *
+ * Created: 17/05/2026
+ * Author: Abner Quiej (Humano)
+ * Description: Driver SPI Maestro a fosc/16 (1 MHz @ 16 MHz)
  */
 
+/****************************************/
+// Encabezado (Libraries)
+/****************************************/
 #include "spi.h"
 #include <avr/io.h>
+
+/****************************************/
+// Function prototypes
+/****************************************/
 
 void SPI_Init(void) {
     /* Direcciones de pines:
@@ -33,3 +44,5 @@ uint8_t SPI_Transfer(uint8_t data) {
     while (!(SPSR & (1 << SPIF))) { }
     return SPDR;
 }
+
+

@@ -1,3 +1,13 @@
+/*
+ * soft_servo.c
+ *
+ * Created: 17/05/2026
+ * Author: Abner Quiej (Mecatronico)
+ * Description: Servomotor por medio de Timer 1
+ */
+/****************************************/
+// Encabezado (Libraries)
+
 #include "soft_servo.h"
 #include <avr/interrupt.h>
 
@@ -8,6 +18,11 @@ static uint16_t           s_min_tick[MAX_SOFT_SERVOS];
 static uint16_t           s_max_tick[MAX_SOFT_SERVOS];
 static uint16_t           s_min_adc[MAX_SOFT_SERVOS];
 static uint16_t           s_max_adc[MAX_SOFT_SERVOS];
+
+
+/****************************************/
+// Function prototypes
+/****************************************/
 
 void SoftServo_Init(void) {
     for (uint8_t i = 0; i < MAX_SOFT_SERVOS; i++) {
@@ -54,8 +69,10 @@ void SoftServo_SetTicks(uint8_t canal, uint16_t ticks) {
     s_ticks[canal] = ticks;
 }
 
-/* ISR: solo genera PWM por software.
- * El frame_flag ahora lo maneja flexi_timer (Timer2). */
+/****************************************/
+// Interrupt routines
+/****************************************/
+
 ISR(TIMER1_COMPA_vect) {
     static uint16_t count = 0;
 
@@ -73,3 +90,4 @@ ISR(TIMER1_COMPA_vect) {
 
     if (++count >= 1000) count = 0;
 }
+

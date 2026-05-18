@@ -1,8 +1,23 @@
-/*  uart.c — USART0 polling, 8N1, sin interrupciones                    */
+/*
+ * uart.c
+ *
+ * Created: Guatemala 17/05/2026
+ * Author: Abner Quiej (el mismo humano)
+ * Description: USART0 polling, 8N1, sin interrupciones
+ */
+
+/****************************************/
+// Encabezado (Libraries)
+/****************************************/
 
 #define F_CPU 16000000UL
 #include "uart.h"
 #include <avr/io.h>
+
+
+/****************************************/
+// Function prototypes
+/****************************************/
 
 void UART_Init(uint32_t baud) {
     uint16_t ubrr = (uint16_t)((F_CPU / (16UL * baud)) - 1);
@@ -57,8 +72,13 @@ void UART_PrintHex(uint8_t v) {
     UART_Send((uint8_t)hex[ v       & 0x0F]);
 }
 
-/* ── Recepcion no bloqueante ─────────────────────────────────────────
- *  RXC0 = 1 cuando hay un byte sin leer en UDR0.                    */
+
+/****************************************/
+// Main Function
+/****************************************/
+
+// Recepcion
+
 uint8_t UART_Available(void) {
     return (UCSR0A & (1 << RXC0)) ? 1 : 0;
 }
@@ -67,3 +87,8 @@ uint8_t UART_Read(void) {
     while (!(UCSR0A & (1 << RXC0))) { }
     return UDR0;
 }
+
+
+
+
+
