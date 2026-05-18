@@ -12,10 +12,14 @@
 
 #include <stdint.h>
 
-void UART_Init(uint32_t baud);
-void UART_Send(uint8_t c);
-void UART_PrintString(const char *s);
-void UART_PrintInt(int16_t v);
-void UART_PrintHex(uint8_t v);
+void    UART_Init(uint32_t baud);
+void    UART_Send(uint8_t c);
+void    UART_PrintString(const char *s);
+void    UART_PrintInt(int16_t v);
+void    UART_PrintHex(uint8_t v);
+
+/* Recepcion no bloqueante (usadas en modo UART del robot) */
+uint8_t UART_Available(void);   /* 1 si hay byte listo en UDR0, 0 si no */
+uint8_t UART_Read(void);        /* lee 1 byte (bloqueante si no hay)    */
 
 #endif /* UART_H_ */

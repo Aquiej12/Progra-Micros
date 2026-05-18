@@ -56,3 +56,14 @@ void UART_PrintHex(uint8_t v) {
     UART_Send((uint8_t)hex[(v >> 4) & 0x0F]);
     UART_Send((uint8_t)hex[ v       & 0x0F]);
 }
+
+/* ── Recepcion no bloqueante ─────────────────────────────────────────
+ *  RXC0 = 1 cuando hay un byte sin leer en UDR0.                    */
+uint8_t UART_Available(void) {
+    return (UCSR0A & (1 << RXC0)) ? 1 : 0;
+}
+
+uint8_t UART_Read(void) {
+    while (!(UCSR0A & (1 << RXC0))) { }
+    return UDR0;
+}
