@@ -7,6 +7,7 @@ Robot cuadrúpedo de 8 servos controlado inalámbricamente por LoRa. Tiene **3 m
 
 ---
 
+
 ## Tabla de contenidos
 
 1. [Arquitectura del sistema](#1-arquitectura-del-sistema)

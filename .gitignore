@@ -1,3 +1,19 @@
+# === Build / IDE (Microchip Studio, Visual Studio) ===
 **/Debug
+**/Release
 **/.vs
-**.claude
+
+# === Archivos de Claude Code (NO son tus resúmenes técnicos) ===
+.claude/
+.agents/
+skills-lock.json
+CLAUDE.md
+MEMORY.md
+AGENTS.md
+
+# === Secretos / credenciales (NUNCA subir) ===
+credenciales.py
+**/credenciales.py
+.env
+
+# NOTA: tus README.md y resúmenes técnicos en .md SÍ se suben (no están ignorados).

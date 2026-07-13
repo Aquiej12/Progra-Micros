@@ -50,8 +50,8 @@ static const uint8_t KB[4] = { KB_S1, KB_S2, KB_S3, KB_S4 };
 #define KNEE_LIFT       30      // cuanto sube la rodilla al levantar    
 #define KNEE_STAB       15      // baja la opuesta para anclar
 
-#define HIP_SWING_FWD   15      // zancada adelante                       
-#define HIP_SWING_BWD   15      // zancada atras                          
+#define HIP_SWING_FWD   25      // zancada adelante                       
+#define HIP_SWING_BWD   25      // zancada atras                          
 #define YAW_SWING       15      // amplitud de giro                       
 
 #define HIP_PUSH_L      10      // empuje del cuerpo, lado izquierdo      

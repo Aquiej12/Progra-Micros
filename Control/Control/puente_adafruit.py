@@ -7,6 +7,7 @@ Description: Puente bidireccional Adafruit IO <-> CONTROL UART
 
 """
 
+import os
 import sys
 import time
 import threading
@@ -28,8 +29,23 @@ except ImportError:
 # ═══════════════════════════════════════════════════════════════════════
 #  CONFIGURACION 
 # ═══════════════════════════════════════════════════════════════════════
-ADAFRUIT_IO_USERNAME = "usuario"
-ADAFRUIT_IO_KEY      = "la key:v"
+# Las credenciales NO van en el codigo (para no subirlas a git).
+# Opcion A: variables de entorno ADAFRUIT_IO_USERNAME / ADAFRUIT_IO_KEY
+# Opcion B: archivo local credenciales.py (ignorado por git)
+#           -> copia credenciales.ejemplo.py a credenciales.py y pon tus datos
+ADAFRUIT_IO_USERNAME = os.environ.get("ADAFRUIT_IO_USERNAME")
+ADAFRUIT_IO_KEY      = os.environ.get("ADAFRUIT_IO_KEY")
+
+if not ADAFRUIT_IO_USERNAME or not ADAFRUIT_IO_KEY:
+    try:
+        from credenciales import ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY
+    except ImportError:
+        print("ERROR: faltan las credenciales de Adafruit IO.\n"
+              "  Opcion A: define las variables de entorno "
+              "ADAFRUIT_IO_USERNAME y ADAFRUIT_IO_KEY\n"
+              "  Opcion B: copia credenciales.ejemplo.py a credenciales.py "
+              "y coloca tus datos.")
+        sys.exit(1)
 
 # Feed donde el dashboard publica los comandos de movimiento
 FEED_COMANDO = "robot-comando"
