@@ -26,6 +26,7 @@
 #include "spi.h"
 #include "lora.h"
 #include "uart.h"
+#include "cinematica.h"   // motor de marcha Cartesiano (creep gait) para fb
 
 // Indices de canales soft servo
 #define SW_KNEE_S1  0
@@ -315,8 +316,9 @@ int main(void) {
     FlexiTimer_Start();
     sei();
 
-    // Ajustar a  Postura inicial 
+    // Ajustar a  Postura inicial
     go_stance(KB);
+    Gait_Init(KB);          // inicializa el motor Cartesiano en postura neutra
     _delay_ms(500);
 
     while (1) {
@@ -396,15 +398,30 @@ int main(void) {
                 (int16_t)KB[i] + smooth_knee_off, KNEE_FLOOR, KNEE_MAX);
         }
 
-        // 7) FSM de marcha 
-        switch (state) {
-
-        case IDLE:
+        // 7) Despachador de marcha:
+        //    - Adelante/Atras (fb)  -> motor CARTESIANO (cinematica.c)
+        //    - Giro / Strafe        -> FSM discreta anterior (execute_step*)
+        if (new_dir == 0) {
+            // Detenido: ambos motores en reposo, postura neutra.
+            Gait_SetCommand(0, kb);
             go_stance(kb);
-            if (new_dir != 0) {
-                direction  = new_dir;
-                seq_leg    = 0;
-                seq_step   = 0;
+            state = IDLE;
+        }
+        else if (!is_turning && !is_strafe) {
+            // ----- CAMINAR ADELANTE / ATRAS : motor Cartesiano -----
+            state = IDLE;                 // mantiene en reposo la FSM de giro/strafe
+            Gait_SetCommand(new_dir, kb);
+            Gait_Tick();
+        }
+        else {
+            // ----- GIRO o STRAFE : FSM discreta anterior -----
+            Gait_SetCommand(0, kb);       // motor Cartesiano en reposo
+            direction = new_dir;
+
+            switch (state) {
+            case IDLE:
+                seq_leg  = 0;
+                seq_step = 0;
                 if (is_strafe) {
                     execute_step_strafe(0, 0, direction, kb);
                 } else {
@@ -412,36 +429,28 @@ int main(void) {
                 }
                 wait_ticks = STEP_TICKS;
                 state      = SEQ_WAIT;
-            }
-            break;
+                break;
 
-        case SEQ_WAIT:
-            if (new_dir == 0) {
-                go_stance(kb);
-                state = IDLE;
+            case SEQ_WAIT:
+                if (wait_ticks > 0) {
+                    wait_ticks--;
+                    break;
+                }
+                seq_step++;
+                if (seq_step >= 4) {
+                    seq_step = 0;
+                    seq_leg  = (seq_leg + 1) & 3;
+                }
+                if (is_strafe) {
+                    execute_step_strafe((uint8_t)(seq_leg & 1), seq_step,
+                                        direction, kb);
+                } else {
+                    execute_step(SEQ[seq_leg], seq_step, direction,
+                                 is_turning, kb);
+                }
+                wait_ticks = STEP_TICKS;
                 break;
             }
-            direction = new_dir;
-
-            if (wait_ticks > 0) {
-                wait_ticks--;
-                break;
-            }
-
-            seq_step++;
-            if (seq_step >= 4) {
-                seq_step = 0;
-                seq_leg  = (seq_leg + 1) & 3;
-            }
-            if (is_strafe) {
-                execute_step_strafe((uint8_t)(seq_leg & 1), seq_step,
-                                    direction, kb);
-            } else {
-                execute_step(SEQ[seq_leg], seq_step, direction,
-                             is_turning, kb);
-            }
-            wait_ticks = STEP_TICKS;
-            break;
         }
     }
 
